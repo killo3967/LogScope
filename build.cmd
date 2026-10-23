@@ -44,6 +44,17 @@ if errorlevel 1 (
     exit /b 1
 )
 
+rem Con LogScope abierto, la copia final falla despues de minuto y medio de
+rem compilacion: el .exe en ejecucion esta bloqueado. Se comprueba antes.
+if exist "LogScope.exe" (
+    powershell -NoProfile -Command "try { $f = [IO.File]::Open('LogScope.exe','Open','ReadWrite','None'); $f.Close(); exit 0 } catch { exit 1 }"
+    if errorlevel 1 (
+        echo [ERROR] LogScope.exe esta abierto y bloquea el fichero.
+        echo         Cierra la aplicacion y vuelve a ejecutar build.cmd.
+        exit /b 1
+    )
+)
+
 echo == LogScope ^| perfil %PERFIL%
 echo    tauri build ejecuta antes "npm run build" ^(tsc --noEmit + vite build^)
 echo    y compila con la feature tauri/custom-protocol, que incrusta el frontend.
@@ -63,7 +74,9 @@ if not exist "%BUILD_DIR%\logscope.exe" (
 
 copy /y "%BUILD_DIR%\logscope.exe" "LogScope.exe" >nul
 if errorlevel 1 (
-    echo [ERROR] No se pudo copiar el ejecutable a la raiz.
+    echo.
+    echo [ERROR] No se pudo copiar el ejecutable a la raiz: esta en uso.
+    echo         Cierra LogScope y vuelve a ejecutar build.cmd.
     exit /b 1
 )
 
