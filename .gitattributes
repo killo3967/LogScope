@@ -1,0 +1,12 @@
+# Normaliza finales de línea en el índice y en el checkout
+* text=auto eol=lf
+
+# Binarios
+*.png binary
+*.ico binary
+*.icns binary
+*.jpg binary
+
+# Ficheros de lock: sin ruido en diffs
+package-lock.json -diff
+src-tauri/Cargo.lock -diff

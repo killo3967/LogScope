@@ -1,0 +1,805 @@
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::{Arc, Mutex};
+
+use serde::Deserialize;
+
+use crate::model::{Field, Level, Row};
+use crate::parser::{LogParser, NO_TS};
+
+/// Tope de líneas por entrada: un log sin instantes no debe acabar siendo una
+/// única entrada de un millón de líneas.
+const MAX_ENTRY_LINES: u32 = 64;
+
+pub struct EntryTable {
+    arena: Vec<u8>,
+    starts: Vec<u32>,
+    lens: Vec<u32>,
+    ts: Vec<i64>,
+    level: Vec<u8>,
+    line_nos: Vec<u32>,
+    pending: Vec<u8>,
+    consumed: u64,
+    parser: Arc<dyn LogParser>,
+    /// Líneas físicas leídas, para numerar el inicio de cada entrada.
+    lines_seen: u32,
+    /// Líneas que lleva la entrada en construcción.
+    last_entry_lines: u32,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+pub struct Filters {
+    /// Máscara de niveles; `None` equivale a todos.
+    pub levels: Option<u8>,
+    /// Búsqueda textual sin distinguir mayúsculas.
+    pub text: Option<String>,
+}
+
+impl Filters {
+    pub fn is_active(&self) -> bool {
+        self.levels.is_some_and(|m| m != crate::model::ALL_LEVELS)
+            || self.text.as_ref().is_some_and(|t| !t.is_empty())
+    }
+}
+
+/// Búsqueda sin distinguir mayúsculas sobre bytes, sin asignar memoria.
+/// Solo pliega ASCII: si la aguja lleva caracteres no ASCII se usa la ruta
+/// Unicode, que sí asigna pero es correcta con acentos.
+fn contains_ignore_ascii_case(haystack: &[u8], needle: &[u8]) -> bool {
+    if needle.is_empty() {
+        return true;
+    }
+    if needle.len() > haystack.len() {
+        return false;
+    }
+    let last = haystack.len() - needle.len();
+    for start in 0..=last {
+        if !haystack[start].eq_ignore_ascii_case(&needle[0]) {
+            continue;
+        }
+        if haystack[start..start + needle.len()]
+            .iter()
+            .zip(needle)
+            .all(|(a, b)| a.eq_ignore_ascii_case(b))
+        {
+            return true;
+        }
+    }
+    false
+}
+
+fn decode(bytes: &[u8]) -> String {
+    // Los logs de Windows suelen empezar con BOM; si se deja, la primera línea
+    // no empieza por dígito y no se le reconoce el instante.
+    let bytes = bytes.strip_prefix(&[0xEF, 0xBB, 0xBF]).unwrap_or(bytes);
+    match std::str::from_utf8(bytes) {
+        Ok(text) => text.to_string(),
+        Err(_) => {
+            let (cow, _, _) = encoding_rs::WINDOWS_1252.decode(bytes);
+            cow.into_owned()
+        }
+    }
+}
+
+impl EntryTable {
+    pub fn new(parser: Arc<dyn LogParser>) -> Self {
+        EntryTable {
+            arena: Vec::new(),
+            starts: Vec::new(),
+            lens: Vec::new(),
+            ts: Vec::new(),
+            level: Vec::new(),
+            line_nos: Vec::new(),
+            pending: Vec::new(),
+            consumed: 0,
+            parser,
+            lines_seen: 0,
+            last_entry_lines: 0,
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.lens.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.lens.is_empty()
+    }
+
+    pub fn consumed(&self) -> u64 {
+        self.consumed
+    }
+
+    pub fn field_names(&self) -> Vec<String> {
+        self.parser.field_names().to_vec()
+    }
+
+    pub fn parser_name(&self) -> &'static str {
+        self.parser.name()
+    }
+
+    pub fn reset(&mut self) {
+        self.arena.clear();
+        self.starts.clear();
+        self.lens.clear();
+        self.ts.clear();
+        self.level.clear();
+        self.line_nos.clear();
+        self.pending.clear();
+        self.consumed = 0;
+        self.lines_seen = 0;
+        self.last_entry_lines = 0;
+    }
+
+    pub fn ts_at(&self, index: usize) -> i64 {
+        self.ts[index]
+    }
+
+    fn push_line(&mut self, text: &str) {
+        let line_no = self.lines_seen;
+        let parsed = self.parser.parse(text);
+        let start = self.arena.len() as u32;
+        self.arena.extend_from_slice(text.as_bytes());
+        self.starts.push(start);
+        self.lens.push(text.len() as u32);
+        self.ts.push(parsed.ts_ms.unwrap_or(NO_TS));
+        self.level.push(parsed.level.as_u8());
+        self.line_nos.push(line_no);
+    }
+
+    /// Añade una línea de continuación a la entrada en construcción.
+    /// `position` es su índice dentro de la entrada (0 = primera línea).
+    fn append_to_last(&mut self, text: &str, position: usize) {
+        if self.lens.is_empty() {
+            self.push_line(text);
+            self.last_entry_lines = 1;
+            return;
+        }
+        let index = self.lens.len() - 1;
+        self.arena.extend_from_slice(b"\n");
+        self.arena.extend_from_slice(text.as_bytes());
+        self.lens[index] += 1 + text.len() as u32;
+
+        // El instante y el nivel pueden aparecer en una línea de continuación,
+        // así que se completan si aún faltan. Se interpreta con su posición
+        // real dentro de la entrada.
+        let parsed = self.parser.parse_line_at(text, position);
+        if self.ts[index] == NO_TS {
+            if let Some(ts) = parsed.ts_ms {
+                self.ts[index] = ts;
+            }
+        }
+        if self.level[index] == Level::Unknown.as_u8() && parsed.level != Level::Unknown {
+            self.level[index] = parsed.level.as_u8();
+        }
+    }
+
+    /// Decide si la línea abre entrada o continúa la anterior.
+    fn push_entry_line(&mut self, text: &str) {
+        let position = self.last_entry_lines as usize;
+        self.lines_seen += 1;
+        let starts = self.lens.is_empty()
+            || self.parser.starts_entry(text)
+            || self.last_entry_lines >= MAX_ENTRY_LINES;
+        if starts {
+            self.push_line(text);
+            self.last_entry_lines = 1;
+        } else {
+            self.append_to_last(text, position);
+            self.last_entry_lines += 1;
+        }
+    }
+
+    /// Ingiere un bloque de bytes, conservando la línea incompleta final.
+    pub fn ingest_bytes(&mut self, bytes: &[u8]) {
+        self.pending.extend_from_slice(bytes);
+        self.consumed += bytes.len() as u64;
+
+        let mut start = 0usize;
+        for i in 0..self.pending.len() {
+            if self.pending[i] != b'\n' {
+                continue;
+            }
+            let mut end = i;
+            if end > start && self.pending[end - 1] == b'\r' {
+                end -= 1;
+            }
+            let text = decode(&self.pending[start..end]);
+            self.push_entry_line(&text);
+            start = i + 1;
+        }
+        if start > 0 {
+            self.pending.drain(..start);
+        }
+    }
+
+    /// Columnas que de verdad traen datos en las primeras entradas.
+    ///
+    /// Sin esto se muestran cabeceras para campos que el fichero nunca usa:
+    /// un log de cuatro líneas acababa con seis cabeceras.
+    pub fn present_fields(&self, limit: usize) -> Vec<String> {
+        let declared = self.parser.field_names();
+        let mut seen: Vec<String> = Vec::new();
+        let count = self.len().min(limit);
+
+        for index in 0..count {
+            if seen.len() == declared.len() {
+                break;
+            }
+            for (name, value) in self.parser.parse(&self.raw_of(index)).fields {
+                if !value.trim().is_empty() && !seen.iter().any(|n| *n == name) {
+                    seen.push(name);
+                }
+            }
+        }
+
+        declared
+            .iter()
+            .filter(|name| seen.iter().any(|s| s == *name))
+            .cloned()
+            .collect()
+    }
+
+    /// Índices visibles bajo el filtro indicado.
+    pub fn matching_indices(&self, filters: &Filters) -> Vec<u32> {
+        if !filters.is_active() {
+            return Vec::new();
+        }
+        let needle_lower = filters
+            .text
+            .as_ref()
+            .filter(|t| !t.is_empty())
+            .map(|t| t.to_lowercase());
+        let ascii_only = needle_lower.as_deref().is_some_and(str::is_ascii);
+
+        (0..self.len())
+            .filter(|index| self.matches_entry(*index, filters, needle_lower.as_deref(), ascii_only))
+            .map(|index| index as u32)
+            .collect()
+    }
+
+    /// ¿La entrada `index` pasa el filtro? Lo usan tanto la tabla suelta como
+    /// la vista combinada.
+    pub fn matches_entry(
+        &self,
+        index: usize,
+        filters: &Filters,
+        needle_lower: Option<&str>,
+        ascii_only: bool,
+    ) -> bool {
+        if let Some(mask) = filters.levels {
+            if mask & (1u8 << self.level[index].min(6)) == 0 {
+                return false;
+            }
+        }
+        if let Some(needle) = needle_lower {
+            let start = self.starts[index] as usize;
+            let len = self.lens[index] as usize;
+            let bytes = &self.arena[start..start + len];
+            let hit = if ascii_only {
+                contains_ignore_ascii_case(bytes, needle.as_bytes())
+            } else {
+                decode(bytes).to_lowercase().contains(needle)
+            };
+            if !hit {
+                return false;
+            }
+        }
+        true
+    }
+
+    fn raw_of(&self, index: usize) -> String {
+        let start = self.starts[index] as usize;
+        let len = self.lens[index] as usize;
+        decode(&self.arena[start..start + len])
+    }
+
+    pub fn row(&self, index: usize) -> Row {
+        let raw = self.raw_of(index);
+        let parsed = self.parser.parse(&raw);
+        let ts = self.ts[index];
+        Row {
+            index: index as u32,
+            line_no: self.line_nos[index],
+            ts_ms: if ts == NO_TS { None } else { Some(ts) },
+            level: Level::from_u8(self.level[index]),
+            fields: parsed
+                .fields
+                .into_iter()
+                .map(|(name, value)| Field { name, value })
+                .collect(),
+            raw,
+            source: String::new(),
+        }
+    }
+
+    /// Página de la vista: `visible` contiene los índices reales ya filtrados.
+    pub fn page(&self, visible: &[u32], start: usize, count: usize) -> Vec<Row> {
+        let end = (start + count).min(visible.len());
+        if start >= end {
+            return Vec::new();
+        }
+        visible[start..end]
+            .iter()
+            .map(|&index| self.row(index as usize))
+            .collect()
+    }
+}
+
+// ---------------------------------------------------------------- LogSet
+
+/// Una fuente del conjunto: un fichero con su propio parser ya detectado.
+pub struct Source {
+    pub name: String,
+    pub table: EntryTable,
+}
+
+/// Conjunto de uno o varios ficheros. Con una sola fuente se comporta como la
+/// tabla suelta (orden de lectura). Con varias, las entradas se ordenan por
+/// instante, y las que no tienen instante quedan al final.
+pub struct LogSet {
+    pub sources: Vec<Source>,
+    /// (instante, índice de fuente, índice de entrada)
+    order: Vec<(i64, u32, u32)>,
+    merged: bool,
+    cache: Mutex<Option<(Filters, Arc<Vec<u32>>)>>,
+    /// Cambia cada vez que se ingieren entradas nuevas por el tail.
+    generation: AtomicU32,
+}
+
+impl LogSet {
+    pub fn new(sources: Vec<Source>) -> LogSet {
+        let merged = sources.len() > 1;
+        let mut order: Vec<(i64, u32, u32)> = Vec::new();
+
+        if merged {
+            for (source_index, source) in sources.iter().enumerate() {
+                for entry in 0..source.table.len() {
+                    order.push((
+                        source.table.ts_at(entry),
+                        source_index as u32,
+                        entry as u32,
+                    ));
+                }
+            }
+            // Los sin instante, al final y en el orden en que se leyeron.
+            // A igualdad de instante manda el número de entrada y después la
+            // fuente: así las líneas de ficheros distintos se entremezclan en
+            // ronda (a0, b0, a1, b1…) en vez de agruparse por fichero.
+            order.sort_by(|a, b| {
+                let a_sin = a.0 == NO_TS;
+                let b_sin = b.0 == NO_TS;
+                a_sin
+                    .cmp(&b_sin)
+                    .then(a.0.cmp(&b.0))
+                    .then(a.2.cmp(&b.2))
+                    .then(a.1.cmp(&b.1))
+            });
+        } else {
+            for entry in 0..sources[0].table.len() {
+                order.push((0, 0, entry as u32));
+            }
+        }
+
+        LogSet {
+            sources,
+            order,
+            merged,
+            cache: Mutex::new(None),
+            generation: AtomicU32::new(1),
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.order.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.order.is_empty()
+    }
+
+    pub fn is_merged(&self) -> bool {
+        self.merged
+    }
+
+    pub fn source_names(&self) -> Vec<String> {
+        self.sources.iter().map(|source| source.name.clone()).collect()
+    }
+
+    pub fn consumed(&self) -> u64 {
+        self.sources.iter().map(|source| source.table.consumed()).sum()
+    }
+
+    pub fn parser_name(&self) -> String {
+        let mut names: Vec<&str> = self
+            .sources
+            .iter()
+            .map(|source| source.table.parser_name())
+            .collect();
+        names.dedup();
+        names.join("+")
+    }
+
+    pub fn generation(&self) -> u32 {
+        self.generation.load(Ordering::SeqCst)
+    }
+
+    pub fn invalidate(&self) {
+        self.generation.fetch_add(1, Ordering::SeqCst);
+        if let Ok(mut cache) = self.cache.lock() {
+            *cache = None;
+        }
+    }
+
+    /// Tras ingerir por el tail en una única fuente, añade los índices nuevos.
+    pub fn sync_single_source(&mut self) {
+        if self.merged {
+            return;
+        }
+        let entries = self.sources[0].table.len();
+        for entry in self.order.len()..entries {
+            self.order.push((0, 0, entry as u32));
+        }
+        self.invalidate();
+    }
+
+    /// Tras un truncado o una rotación del fichero seguido.
+    pub fn reset_single_source(&mut self) {
+        if let Some(source) = self.sources.first_mut() {
+            source.table.reset();
+        }
+        self.order.clear();
+        self.invalidate();
+    }
+
+    pub fn row(&self, index: usize) -> Row {
+        let (_, source_index, entry) = self.order[index];
+        let source = &self.sources[source_index as usize];
+        let mut row = source.table.row(entry as usize);
+        row.index = index as u32;
+        row.source = if self.merged {
+            source.name.clone()
+        } else {
+            String::new()
+        };
+        row
+    }
+
+    pub fn page(&self, visible: &[u32], start: usize, count: usize) -> Vec<Row> {
+        let end = (start + count).min(visible.len());
+        if start >= end {
+            return Vec::new();
+        }
+        visible[start..end]
+            .iter()
+            .map(|&index| self.row(index as usize))
+            .collect()
+    }
+
+    /// Campos presentes de todas las fuentes, en el orden en que los declara
+    /// cada parser y sin repetir.
+    pub fn present_fields(&self, limit: usize) -> Vec<String> {
+        let mut fields: Vec<String> = Vec::new();
+        for source in &self.sources {
+            for name in source.table.present_fields(limit) {
+                if !fields.contains(&name) {
+                    fields.push(name);
+                }
+            }
+        }
+        fields
+    }
+
+    /// Índices visibles bajo el filtro, con caché invalidada al crecer.
+    pub fn visible(&self, filters: &Filters) -> Arc<Vec<u32>> {
+        if let Ok(cache) = self.cache.lock() {
+            if let Some((cached, list)) = cache.as_ref() {
+                if cached == filters {
+                    return Arc::clone(list);
+                }
+            }
+        }
+
+        let needle_lower = filters
+            .text
+            .as_ref()
+            .filter(|t| !t.is_empty())
+            .map(|t| t.to_lowercase());
+        let ascii_only = needle_lower.as_deref().is_some_and(str::is_ascii);
+
+        let list: Vec<u32> = if filters.is_active() {
+            (0..self.order.len())
+                .filter(|index| {
+                    let (_, source_index, entry) = self.order[*index];
+                    self.sources[source_index as usize].table.matches_entry(
+                        entry as usize,
+                        filters,
+                        needle_lower.as_deref(),
+                        ascii_only,
+                    )
+                })
+                .map(|index| index as u32)
+                .collect()
+        } else {
+            (0..self.order.len() as u32).collect()
+        };
+
+        let arc = Arc::new(list);
+        if let Ok(mut cache) = self.cache.lock() {
+            *cache = Some((filters.clone(), Arc::clone(&arc)));
+        }
+        arc
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::parser::{AutoParser, BasicParser};
+
+    fn table() -> EntryTable {
+        let mut t = EntryTable::new(BasicParser::new());
+        t.ingest_bytes(b"2026-10-22 10:00:00 INFO arranque\n2026-10-22 10:00:01 ERROR fallo\n");
+        t
+    }
+
+    #[test]
+    fn ingiere_dos_lineas() {
+        let t = table();
+        assert_eq!(t.len(), 2);
+        assert_eq!(t.row(1).level, Level::Error);
+    }
+
+    #[test]
+    fn conserva_linea_incompleta() {
+        let mut t = EntryTable::new(BasicParser::new());
+        t.ingest_bytes(b"linea a medias");
+        assert_eq!(t.len(), 0);
+        t.ingest_bytes(b" que termina\n");
+        assert_eq!(t.len(), 1);
+    }
+
+    #[test]
+    fn filtra_por_nivel() {
+        let t = table();
+        let f = Filters {
+            levels: Some(Level::Error.bit()),
+            text: None,
+        };
+        assert_eq!(t.matching_indices(&f), vec![1]);
+    }
+
+    #[test]
+    fn auto_agrupa_entradas_de_varias_lineas() {
+        let mut t = EntryTable::new(AutoParser::new());
+        t.ingest_bytes(
+            b"2026-10-23 01:23:49.683\nunknown\ninfo\nlogger.x: mensaje uno\n\
+              2026-10-23 01:23:50.000\nunknown\nerror\nlogger.y: mensaje dos\n",
+        );
+
+        assert_eq!(t.len(), 2, "cuatro líneas físicas por entrada, dos entradas");
+
+        let first = t.row(0);
+        assert_eq!(first.line_no, 1);
+        assert_eq!(first.level, Level::Info);
+        assert!(first.ts_ms.is_some());
+        let mensaje = |row: &crate::model::Row| {
+            row.fields
+                .iter()
+                .find(|f| f.name == "Message")
+                .map(|f| f.value.clone())
+                .unwrap_or_default()
+        };
+        assert_eq!(mensaje(&first), "mensaje uno");
+
+        let second = t.row(1);
+        assert_eq!(second.line_no, 5, "la segunda entrada empieza en la línea 5");
+        assert_eq!(second.level, Level::Error);
+        assert_eq!(mensaje(&second), "mensaje dos", "no arrastra la anterior");
+    }
+
+    #[test]
+    fn auto_mantiene_una_entrada_por_linea_si_cada_linea_trae_instante() {
+        let mut t = EntryTable::new(AutoParser::new());
+        t.ingest_bytes(b"2026-10-22 10:00:00 INFO arranque\n2026-10-22 10:00:01 ERROR fallo\n");
+        assert_eq!(t.len(), 2);
+        assert_eq!(t.row(1).level, Level::Error);
+    }
+
+    #[test]
+    fn basic_sigue_agrupando_una_linea_por_entrada() {
+        let t = table();
+        assert_eq!(t.len(), 2);
+    }
+
+    #[test]
+    fn el_tope_corta_una_entrada_sin_instantes() {
+        let mut t = EntryTable::new(AutoParser::new());
+        let mut text = String::new();
+        for i in 0..(MAX_ENTRY_LINES as usize * 2) {
+            text.push_str(&format!("linea sin instante {i}\n"));
+        }
+        t.ingest_bytes(text.as_bytes());
+        assert!(
+            t.len() >= 2,
+            "debe partir en varias entradas, no en una sola: {}",
+            t.len()
+        );
+    }
+
+    #[test]
+    fn present_fields_descarta_las_columnas_vacias() {
+        let mut t = EntryTable::new(AutoParser::new());
+        t.ingest_bytes(b"2026-10-23 01:23:49.683\nunknown\ninfo\nlogger.x: mensaje uno\n");
+
+        let fields = t.present_fields(200);
+        assert!(fields.contains(&"Tag".to_string()));
+        assert!(fields.contains(&"Logger".to_string()));
+        assert!(fields.contains(&"Message".to_string()));
+        assert!(
+            !fields.contains(&"Thread".to_string()),
+            "este log no trae hilo, no debe haber columna: {fields:?}"
+        );
+    }
+
+    #[test]
+    fn present_fields_con_mapeo_explicito_no_anuncia_de_mas() {
+        let parser = AutoParser::with_mapping(Some(vec![
+            crate::parser::Role::Time,
+            crate::parser::Role::Tag,
+            crate::parser::Role::Level,
+            crate::parser::Role::Message,
+        ]));
+        let mut t = EntryTable::new(parser);
+        t.ingest_bytes(b"2026-10-23 01:23:49.683\nunknown\ninfo\nmensaje\n");
+
+        let fields = t.present_fields(200);
+        assert_eq!(fields, vec!["Tag".to_string(), "Message".to_string()]);
+    }
+
+    // ------------------------------------------------------------ LogSet
+
+    fn fuente(name: &str, contenido: &[u8]) -> Source {
+        let mut table = EntryTable::new(AutoParser::new());
+        table.ingest_bytes(contenido);
+        Source {
+            name: name.to_string(),
+            table,
+        }
+    }
+
+    #[test]
+    fn combina_dos_ficheros_en_orden_de_instante() {
+        let a = fuente(
+            "a.log",
+            b"2026-10-22 10:00:00 INFO primero\n2026-10-22 10:00:04 ERROR cuarto\n",
+        );
+        let b = fuente(
+            "b.log",
+            b"2026-10-22 10:00:01 WARN segundo\n2026-10-22 10:00:02 INFO tercero\n",
+        );
+
+        let set = LogSet::new(vec![a, b]);
+        assert_eq!(set.len(), 4);
+        assert!(set.is_merged());
+
+        let mensajes: Vec<String> = (0..4)
+            .map(|i| {
+                set.row(i)
+                    .fields
+                    .iter()
+                    .find(|f| f.name == "Message")
+                    .map(|f| f.value.clone())
+                    .unwrap_or_default()
+            })
+            .collect();
+        assert_eq!(
+            mensajes,
+            vec!["primero", "segundo", "tercero", "cuarto"],
+            "deben intercalarse por instante"
+        );
+
+        // La columna de origen identifica el fichero de cada fila.
+        assert_eq!(set.row(0).source, "a.log");
+        assert_eq!(set.row(1).source, "b.log");
+    }
+
+    #[test]
+    fn las_entradas_sin_instante_van_al_final() {        let a = fuente("a.log", b"2026-10-22 10:00:00 INFO con hora\n");
+        let b = fuente("b.log", b"linea sin instante\n");
+        let set = LogSet::new(vec![a, b]);
+
+        assert_eq!(set.len(), 2);
+        assert!(set.row(0).ts_ms.is_some());
+        assert!(set.row(1).ts_ms.is_none());
+    }
+
+    fn mensajes(set: &LogSet) -> Vec<String> {
+        (0..set.len())
+            .map(|index| {
+                set.row(index)
+                    .fields
+                    .iter()
+                    .find(|field| field.name == "Message")
+                    .map(|field| field.value.clone())
+                    .unwrap_or_default()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn intercala_las_fuentes_cuando_el_instante_coincide() {
+        let a = fuente(
+            "a.log",
+            b"2026-10-22 10:00:00 INFO a0\n2026-10-22 10:00:00 INFO a1\n2026-10-22 10:00:00 INFO a2\n",
+        );
+        let b = fuente(
+            "b.log",
+            b"2026-10-22 10:00:00 INFO b0\n2026-10-22 10:00:00 INFO b1\n2026-10-22 10:00:00 INFO b2\n",
+        );
+        let set = LogSet::new(vec![a, b]);
+
+        // Mismo segundo: se alternan las fuentes en ronda, no se agrupan.
+        assert_eq!(
+            mensajes(&set),
+            vec!["a0", "b0", "a1", "b1", "a2", "b2"],
+            "con instantes iguales debe entremezclarse"
+        );
+    }
+
+    #[test]
+    fn una_fuente_con_mas_lineas_no_bloquea_a_la_otra() {
+        let a = fuente(
+            "a.log",
+            b"2026-10-22 10:00:00 INFO a0\n2026-10-22 10:00:00 INFO a1\n2026-10-22 10:00:00 INFO a2\n2026-10-22 10:00:00 INFO a3\n",
+        );
+        let b = fuente("b.log", b"2026-10-22 10:00:00 INFO b0\n");
+        let set = LogSet::new(vec![a, b]);
+
+        // La corta se intercala y luego la larga sigue sola.
+        assert_eq!(mensajes(&set), vec!["a0", "b0", "a1", "a2", "a3"]);
+    }
+
+    #[test]
+    fn una_sola_fuente_respeta_el_orden_de_lectura() {
+        let a = fuente(
+            "a.log",
+            b"2026-10-22 10:00:05 INFO posterior\n2026-10-22 10:00:00 INFO anterior\n",
+        );
+        let set = LogSet::new(vec![a]);
+        assert!(!set.is_merged());
+        assert_eq!(set.row(0).source, "");
+        let mensaje = |i: usize| {
+            set.row(i)
+                .fields
+                .iter()
+                .find(|f| f.name == "Message")
+                .map(|f| f.value.clone())
+                .unwrap_or_default()
+        };
+        assert_eq!(mensaje(0), "posterior", "sin combinar no se reordena");
+    }
+
+    #[test]
+    fn filtra_en_la_vista_combinada() {
+        let a = fuente("a.log", b"2026-10-22 10:00:00 INFO uno\n");
+        let b = fuente("b.log", b"2026-10-22 10:00:01 ERROR dos\n");
+        let set = LogSet::new(vec![a, b]);
+
+        let visibles = set.visible(&Filters {
+            levels: Some(Level::Error.bit()),
+            text: None,
+        });
+        assert_eq!(visibles.len(), 1);
+        assert_eq!(set.row(visibles[0] as usize).level, Level::Error);
+    }
+
+    #[test]
+    fn present_fields_une_las_fuentes() {
+        let a = fuente("a.log", b"2026-10-22 10:00:00 INFO [12] con hilo\n");
+        let b = fuente("b.log", b"2026-10-22 10:00:01 ERROR sin hilo\n");
+        let set = LogSet::new(vec![a, b]);
+        let fields = set.present_fields(50);
+        assert!(fields.contains(&"Thread".to_string()));
+        assert!(fields.contains(&"Message".to_string()));
+    }
+}
