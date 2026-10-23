@@ -117,6 +117,13 @@ impl EntryTable {
         self.parser.name()
     }
 
+    /// ¿Alguna entrada de la tabla tiene instante? Sirve para impedir combinar
+    /// un log con fecha y hora con otro que no la tenga: ese no se puede
+    /// intercalar, solo amontonar al final.
+    pub fn has_timestamps(&self) -> bool {
+        self.ts.iter().any(|&value| value != NO_TS)
+    }
+
     pub fn reset(&mut self) {
         self.arena.clear();
         self.starts.clear();

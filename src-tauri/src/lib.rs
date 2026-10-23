@@ -225,12 +225,24 @@ fn load_source(path: &PathBuf, options: &OpenOptions) -> Result<EntryTable, Stri
 /// lleva su propio parser, así que se pueden mezclar formatos distintos.
 fn load_sources(paths: &[PathBuf], options: &OpenOptions) -> Result<LogSet, String> {
     let mut sources: Vec<Source> = Vec::with_capacity(paths.len());
+    let combinando = paths.len() > 1;
     for path in paths {
         let table = load_source(path, options)?;
         let name = path
             .file_name()
             .map(|name| name.to_string_lossy().into_owned())
             .unwrap_or_else(|| path.to_string_lossy().into_owned());
+
+        // Al combinar, una fuente sin instante no se puede intercalar: acabaría
+        // amontonada al final y el orden dejaría de tener sentido. Se rechaza
+        // en vez de devolver una vista combinada que engaña. Un fichero vacío
+        // no es un problema: no aporta líneas.
+        if combinando && !table.is_empty() && !table.has_timestamps() {
+            return Err(format!(
+                "no se puede combinar: {name} no tiene columna de fecha y hora"
+            ));
+        }
+
         sources.push(Source { name, table });
     }
     Ok(LogSet::new(sources))
@@ -428,4 +440,74 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error al arrancar LogScope");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    fn escribe(nombre: &str, contenido: &str) -> PathBuf {
+        let mut path = std::env::temp_dir();
+        path.push(format!("logscope-combinar-{nombre}.log"));
+        let mut file = std::fs::File::create(&path).unwrap();
+        file.write_all(contenido.as_bytes()).unwrap();
+        path
+    }
+
+    fn opciones() -> OpenOptions {
+        OpenOptions {
+            path: String::new(),
+            parser: None,
+            pattern: None,
+            delimiter: None,
+            mapping: None,
+        }
+    }
+
+    #[test]
+    fn rechaza_combinar_una_fuente_sin_instante() {
+        let con = escribe("con", "2026-10-22 10:00:00 INFO con hora\n");
+        let sin = escribe("sin", "linea suelta sin instante\n");
+
+        // LogSet no implementa Debug, así que expect_err no vale aquí.
+        let error = match load_sources(&[con.clone(), sin.clone()], &opciones()) {
+            Ok(_) => panic!("una fuente sin instante no se puede intercalar"),
+            Err(error) => error,
+        };
+
+        assert!(error.contains("no se puede combinar"), "{error}");
+        assert!(error.contains("no tiene columna de fecha y hora"), "{error}");
+        assert!(error.contains("logscope-combinar-sin"), "el error debe nombrar el fichero: {error}");
+
+        let _ = std::fs::remove_file(con);
+        let _ = std::fs::remove_file(sin);
+    }
+
+    #[test]
+    fn combina_dos_fuentes_con_instante() {
+        let a = escribe("a", "2026-10-22 10:00:00 INFO primera\n");
+        let b = escribe("b", "2026-10-22 10:00:01 INFO segunda\n");
+
+        let set = load_sources(&[a.clone(), b.clone()], &opciones()).expect("deberia combinar");
+        assert_eq!(set.len(), 2);
+        assert!(set.is_merged());
+        // Orden cronológico entre fuentes distintas.
+        assert!(set.row(0).raw.contains("primera"));
+        assert!(set.row(1).raw.contains("segunda"));
+
+        let _ = std::fs::remove_file(a);
+        let _ = std::fs::remove_file(b);
+    }
+
+    #[test]
+    fn un_fichero_suelto_sin_instante_se_sigue_abriendo() {
+        // La validación es solo al combinar: abrir un log sin fecha y hora debe
+        // seguir funcionando, que es el caso de los logs de texto libre.
+        let sin = escribe("solo", "linea suelta sin instante\n");
+        let set = load_sources(&[sin.clone()], &opciones()).expect("un fichero suelto se abre");
+        assert_eq!(set.len(), 1);
+        assert!(!set.is_merged());
+        let _ = std::fs::remove_file(sin);
+    }
 }
