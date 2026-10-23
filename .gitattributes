@@ -1,6 +1,10 @@
 # Normaliza finales de línea en el índice y en el checkout
 * text=auto eol=lf
 
+# Los scripts de CMD necesitan CRLF aunque el resto del arbol vaya en LF
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
 # Binarios
 *.png binary
 *.ico binary

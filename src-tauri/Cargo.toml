@@ -26,3 +26,11 @@ codegen-units = 1
 lto = true
 opt-level = "s"
 strip = true
+
+# Mismo binario que release, pero conservando simbolos para poder perfilar.
+# La optimizacion no se toca a proposito: hay que medir lo que se distribuye.
+# Si el perfil sale demasiado plano por inlining de LTO, prueba lto = false.
+[profile.profiling]
+inherits = "release"
+debug = 1
+strip = false

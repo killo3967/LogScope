@@ -6,3 +6,7 @@ src-tauri/gen/
 # datos de prueba generados
 samples/
 *.log
+
+# El ejecutable que deja build.cmd en la raiz no se versiona
+LogScope.exe
+LogScope.pdb
