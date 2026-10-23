@@ -4,6 +4,8 @@ import type { HighlightRule } from "./types";
 
 const PALETTE = ["#ef6b6b", "#e0b341", "#7fbf7f", "#4c9aff", "#c792ea", "#ff9d5c"];
 
+export { PALETTE };
+
 interface Props {
   open: boolean;
   rules: HighlightRule[];

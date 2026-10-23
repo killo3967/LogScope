@@ -7,7 +7,7 @@ import { formatBytes } from "./types";
 interface Props {
   open: boolean;
   onClose: () => void;
-  onPick: (paths: string[]) => void;
+  onPick: (paths: string[], mode: "open" | "combine") => void;
 }
 
 export function FileBrowser({ open, onClose, onPick }: Props) {
@@ -23,6 +23,10 @@ export function FileBrowser({ open, onClose, onPick }: Props) {
     if (!open) return;
     setError(null);
     setFilter("");
+    // La selección es de esta apertura: si se conservara, al volver a Examinar
+    // aparecería marcado el fichero anterior y el siguiente quedaría listo para
+    // combinar con él sin que el usuario lo haya pedido.
+    setSelected([]);
     invoke<DirEntryInfo[]>("list_roots")
       .then(setRoots)
       .catch((cause) => setError(String(cause)));
@@ -32,7 +36,7 @@ export function FileBrowser({ open, onClose, onPick }: Props) {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
-      if (event.key === "Enter" && selected.length > 0) onPick(selected);
+      if (event.key === "Enter" && selected.length > 0) onPick(selected, "open");
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -92,7 +96,7 @@ export function FileBrowser({ open, onClose, onPick }: Props) {
             style={{ paddingLeft: 8 + depth * 14 }}
             onClick={() => (entry.is_dir ? toggleDir(entry) : toggleFile(entry))}
             onDoubleClick={() => {
-              if (!entry.is_dir) onPick([entry.path]);
+              if (!entry.is_dir) onPick([entry.path], "open");
             }}
           >
             <span className="twisty">
@@ -143,16 +147,20 @@ export function FileBrowser({ open, onClose, onPick }: Props) {
                 : `${selected.length} ficheros seleccionados`}
           </span>
           <button
-            disabled={selected.length !== 1}
-            onClick={() => onPick(selected)}
-            title="Abrir el fichero marcado"
+            disabled={selected.length === 0}
+            onClick={() => onPick(selected, "open")}
+            title={
+              selected.length > 1
+                ? "Abrir cada fichero marcado en su propia pestaña"
+                : "Abrir el fichero marcado"
+            }
           >
-            Abrir
+            Abrir{selected.length > 1 ? ` (${selected.length})` : ""}
           </button>
           <button
             className="primary"
             disabled={selected.length < 2}
-            onClick={() => onPick(selected)}
+            onClick={() => onPick(selected, "combine")}
             title="Combinar los ficheros marcados en orden de instante"
           >
             Combinar {selected.length > 1 ? `(${selected.length})` : ""}

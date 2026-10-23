@@ -583,3 +583,207 @@ mark {
   flex: none;
   padding: 2px 8px;
 }
+
+/* ------------------------------------------- numeracion de fila y seleccion */
+
+/* Columna fija a la izquierda con el numero de linea del fichero. Es la unica
+   que no se puede arrastrar: su ancho no se persiste en localStorage. */
+.col-rowno {
+  text-align: right;
+  color: #6f7782;
+  user-select: none;
+  font-variant-numeric: tabular-nums;
+}
+
+/* La fila marcada se distingue con un contorno, no con fondo: el fondo lo
+   sobrescribe el color de las reglas de resaltado, que va en estilo inline. */
+.row {
+  cursor: default;
+}
+
+.row.selected {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+  background-color: #1e2733;
+}
+
+.row.selected .col-rowno {
+  color: var(--accent);
+}
+
+/* ------------------------------------------------------------------ ajustes */
+
+.browser.settings {
+  width: min(620px, 94vw);
+}
+
+.settings-block {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.settings-title {
+  font-weight: 600;
+}
+
+.settings-list {
+  margin: 0;
+  padding-left: 18px;
+  min-width: 0;
+  max-width: 100%;
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.settings-list li {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* La rueda dentada: botón cuadrado para que no baile con el resto. */
+.toolbar button.icon {
+  min-width: 34px;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1;
+}
+
+/* Cabeceras centradas en el ancho de su columna. Las celdas de datos siguen a
+   la izquierda: centrar un mensaje largo haria ilegible el grid. */
+.col-head {
+  text-align: center;
+}
+
+/* Nota explicativa bajo una casilla de ajustes. */
+.settings-note {
+  margin: -4px 0 4px 22px;
+  color: var(--muted);
+  font-size: 11px;
+  max-width: 52ch;
+}
+
+/* ------------------------------------------------------- menú de pestaña */
+
+.menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+}
+
+.context-menu {
+  position: fixed;
+  z-index: 61;
+  min-width: 250px;
+  max-width: 340px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-alt);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.5);
+}
+
+.menu-title {
+  padding: 4px 8px 6px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 8px;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.menu-item:hover:not(:disabled) {
+  background: rgba(76, 154, 255, 0.18);
+}
+
+.menu-item:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+
+.menu-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menu-count {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.menu-back {
+  color: var(--muted);
+}
+
+/* Separador dentro del menú contextual. */
+.menu-sep {
+  height: 1px;
+  margin: 4px 2px;
+  background: var(--line);
+}
+
+/* Pestañas marcadas con Ctrl para combinarlas. */
+.tab.selected {
+  background: rgba(76, 154, 255, 0.22);
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+/* La barra de error se cierra con la ✕ de la derecha. */
+.error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.error-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.error-close {
+  flex: 0 0 auto;
+  padding: 0 6px;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.75;
+}
+
+.error-close:hover {
+  opacity: 1;
+}

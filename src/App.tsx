@@ -1,17 +1,28 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
 import { ColumnMapper } from "./ColumnMapper";
 import { FileBrowser } from "./FileBrowser";
-import { HighlightRules } from "./HighlightRules";
+import { HighlightRules, PALETTE } from "./HighlightRules";
 import { LogGrid } from "./LogGrid";
+import { SelectionMenu } from "./SelectionMenu";
+import { SettingsPanel } from "./Settings";
+import { TabMenu } from "./TabMenu";
 import { Toolbar } from "./Toolbar";
-import type { Filters, HighlightRule, OpenResult, ParserKind, Stats } from "./types";
-import { ALL_LEVELS, formatBytes } from "./types";
+import type { Filters, HighlightRule, OpenResult, ParserKind, Settings, Stats } from "./types";
+import { ALL_LEVELS, DEFAULT_SETTINGS, formatBytes, sourceKey } from "./types";
 
 const WIDTHS_KEY = "logscope.columnWidths.v1";
-const RULES_KEY = "logscope.highlightRules.v1";
+const RULES_KEY = "logscope.rulesBySource.v1";
+// Clave del sistema anterior, cuando las reglas eran globales. Solo se lee
+// para migrarlas una vez.
+const LEGACY_RULES_KEY = "logscope.highlightRules.v1";
+const SETTINGS_KEY = "logscope.settings.v1";
+
+// Referencia estable para los logs sin reglas: un array nuevo en cada render
+// volvería a compilar las reglas en el grid sin motivo.
+const SIN_REGLAS: HighlightRule[] = [];
 
 function loadStored<T>(key: string, fallback: T): T {
   try {
@@ -47,19 +58,37 @@ export default function App() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const active = tabs.find((tab) => tab.id === activeId) ?? null;
 
-  const [autoScroll, setAutoScroll] = useState(true);
+  const [settings, setSettings] = useState<Settings>(() => ({
+    ...DEFAULT_SETTINGS,
+    // Los ajustes guardados por una version anterior no traen las claves
+    // nuevas; sin este merge quedarian en undefined y desactivarian opciones
+    // que el usuario nunca toco.
+    ...loadStored<Partial<Settings>>(SETTINGS_KEY, {}),
+  }));
+  const [autoScroll, setAutoScroll] = useState(settings.startWithAutoScroll);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [browserOpen, setBrowserOpen] = useState(false);
   const [mapperOpen, setMapperOpen] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  // El arranque solo intenta reabrir una vez, aunque cambien los ajustes.
+  const restoreTried = useRef(false);
 
   const [widths, setWidths] = useState<Record<string, number>>(() =>
     loadStored(WIDTHS_KEY, {} as Record<string, number>),
   );
-  const [rules, setRules] = useState<HighlightRule[]>(() =>
-    loadStored(RULES_KEY, [] as HighlightRule[]),
-  );
+  const [rulesBySource, setRulesBySource] = useState<Record<string, HighlightRule[]>>(() => {
+    const stored = loadStored<Record<string, HighlightRule[]> | null>(RULES_KEY, null);
+    if (stored) return stored;
+    // Migración: las reglas globales de antes se asignan al log recordado, que
+    // es el que el usuario tenía abierto. Los demás empiezan sin reglas.
+    const legacy = loadStored<HighlightRule[]>(LEGACY_RULES_KEY, []);
+    if (legacy.length > 0 && settings.lastOpen) {
+      return { [sourceKey(settings.lastOpen.paths)]: legacy };
+    }
+    return {};
+  });
 
   useEffect(() => {
     try {
@@ -71,11 +100,19 @@ export default function App() {
 
   useEffect(() => {
     try {
-      localStorage.setItem(RULES_KEY, JSON.stringify(rules));
+      localStorage.setItem(RULES_KEY, JSON.stringify(rulesBySource));
     } catch {
       /* almacenamiento no disponible */
     }
-  }, [rules]);
+  }, [rulesBySource]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    } catch {
+      /* almacenamiento no disponible */
+    }
+  }, [settings]);
 
   const updateTab = useCallback((id: string, patch: Partial<Tab>) => {
     setTabs((previous) =>
@@ -84,8 +121,17 @@ export default function App() {
   }, []);
 
   const openPaths = useCallback(
-    async (targets: string[], mappingToUse: string[] | null) => {
+    async (
+      targets: string[],
+      mappingToUse: string[] | null,
+      // Al reabrir al arrancar hay que usar las opciones con las que se abrió,
+      // no las que tenga el estado ahora mismo.
+      override?: { parser: ParserKind; pattern: string; delimiter: string },
+    ) => {
       if (targets.length === 0) return;
+      const parserToUse = override?.parser ?? parser;
+      const patternToUse = override?.pattern ?? pattern;
+      const delimiterToUse = override?.delimiter ?? delimiter;
       setBusy(true);
       setError(null);
       try {
@@ -93,9 +139,9 @@ export default function App() {
           paths: targets,
           options: {
             path: targets[0],
-            parser,
-            pattern: parser === "pattern" ? pattern : null,
-            delimiter: parser === "dsv" ? delimiter : null,
+            parser: parserToUse,
+            pattern: parserToUse === "pattern" ? patternToUse : null,
+            delimiter: parserToUse === "dsv" ? delimiterToUse : null,
             mapping: mappingToUse,
           },
         });
@@ -105,6 +151,23 @@ export default function App() {
             ? `${result.sources.length} ficheros`
             : (result.sources[0] ?? targets[0]);
 
+        const mapping =
+          mappingToUse ??
+          (result.sample_lines.length > 1 ? result.proposed_mapping : null);
+
+        // Ajuste "iniciar con tail": solo vale con una fuente, igual que el
+        // boton de la barra. Si falla, la sesion se abre sin tail.
+        let tailing = false;
+        if (settings.startWithTail && !result.merged) {
+          try {
+            await invoke("start_tail", { sessionId: result.session_id });
+            tailing = true;
+          } catch {
+            /* se queda sin tail, sin impedir la apertura */
+          }
+        }
+        setAutoScroll(settings.startWithAutoScroll);
+
         const tab: Tab = {
           id: result.session_id,
           title,
@@ -112,22 +175,31 @@ export default function App() {
           session: result,
           mask: ALL_LEVELS,
           text: "",
-          tailing: false,
-          mapping:
-            mappingToUse ??
-            (result.sample_lines.length > 1 ? result.proposed_mapping : null),
+          tailing,
+          mapping,
           generation: 0,
           total: result.entries,
         };
         setTabs((previous) => [...previous, tab]);
         setActiveId(tab.id);
+
+        setSettings((previous) => ({
+          ...previous,
+          lastOpen: {
+            paths: targets,
+            parser: parserToUse,
+            pattern: patternToUse,
+            delimiter: delimiterToUse,
+            mapping,
+          },
+        }));
       } catch (cause) {
         setError(String(cause));
       } finally {
         setBusy(false);
       }
     },
-    [parser, pattern, delimiter],
+    [parser, pattern, delimiter, settings.startWithTail, settings.startWithAutoScroll],
   );
 
   const closeTab = useCallback(
@@ -142,6 +214,7 @@ export default function App() {
         if (id === activeId) setActiveId(next.length > 0 ? next[next.length - 1].id : null);
         return next;
       });
+      setSelectedTabs((previous) => previous.filter((selectedId) => selectedId !== id));
     },
     [activeId],
   );
@@ -208,6 +281,73 @@ export default function App() {
 
   const filterKey = `${active?.mask ?? ALL_LEVELS}|${active?.text ?? ""}`;
 
+  // Las reglas de color son del fichero, no globales: la clave es su ruta, así
+  // que el mismo log recupera su colorización aunque cambie el id de sesión.
+  const activeSource = active ? sourceKey(active.paths) : null;
+  const activeRules = (activeSource && rulesBySource[activeSource]) || SIN_REGLAS;
+
+  const setActiveRules = useCallback(
+    (next: HighlightRule[]) => {
+      if (!activeSource) return;
+      setRulesBySource((previous) => ({ ...previous, [activeSource]: next }));
+    },
+    [activeSource],
+  );
+
+  const [selectedTabs, setSelectedTabs] = useState<string[]>([]);
+
+  // Texto marcado en el grid: si lo hay, el clic derecho abre nuestro menú.
+  const [selectionMenu, setSelectionMenu] = useState<{
+    text: string;
+    x: number;
+    y: number;
+  } | null>(null);
+
+  const [tabMenu, setTabMenu] = useState<{
+    tabId: string;
+    label: string;
+    key: string;
+    x: number;
+    y: number;
+  } | null>(null);
+
+  // Orígenes posibles para copiar: cualquier log con reglas guardadas, esté o
+  // no abierto ahora mismo.
+  const copySources = useMemo(() => {
+    if (!tabMenu) return [];
+    return Object.entries(rulesBySource)
+      .filter(([key, list]) => key !== tabMenu.key && list.length > 0)
+      .map(([key, list]) => ({
+        key,
+        label: key.split("|")[0].split(/[\\/]/).pop() || key,
+        count: list.length,
+      }));
+  }, [rulesBySource, tabMenu]);
+
+  const copyRulesFrom = useCallback(
+    (origin: string) => {
+      if (!tabMenu) return;
+      const destino = tabMenu.key;
+      setRulesBySource((previous) => {
+        const actuales = previous[destino] ?? [];
+        // Se añaden sin duplicar: si ya hay una regla con el mismo patrón,
+        // destino y modo, copiarla otra vez no aporta nada.
+        const huellas = new Set(
+          actuales.map((rule) => `${rule.target}|${rule.isRegex}|${rule.pattern}`),
+        );
+        const nuevas = (previous[origin] ?? [])
+          .filter((rule) => !huellas.has(`${rule.target}|${rule.isRegex}|${rule.pattern}`))
+          .map((rule) => ({
+            ...rule,
+            id: `rule-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          }));
+        return { ...previous, [destino]: [...actuales, ...nuevas] };
+      });
+      setTabMenu(null);
+    },
+    [tabMenu],
+  );
+
   const handleApplyMapping = useCallback(
     (next: string[]) => {
       if (!active) return;
@@ -235,6 +375,94 @@ export default function App() {
     setWidths((previous) => ({ ...previous, [column]: width }));
   }, []);
 
+  // Reapertura al arrancar: una sola vez, y sin pisar lo que haga el usuario.
+  useEffect(() => {
+    if (restoreTried.current) return;
+    restoreTried.current = true;
+    const remembered = settings.lastOpen;
+    if (!settings.rememberLastOpened || !remembered) return;
+    void openPaths(remembered.paths, remembered.mapping, remembered);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Texto marcado en el grid → reglas de color con ese patrón ya escrito. No
+  // se duplica si la regla ya existía: solo se abre el panel.
+  const seedRuleFromSelection = useCallback(
+    (texto: string) => {
+      setSelectionMenu(null);
+      setRulesOpen(true);
+      const patron = texto.trim();
+      if (patron === "" || !activeSource) return;
+      setRulesBySource((previous) => {
+        const actuales = previous[activeSource] ?? [];
+        const yaExiste = actuales.some(
+          (rule) => rule.target === "word" && !rule.isRegex && rule.pattern === patron,
+        );
+        if (yaExiste) return previous;
+        return {
+          ...previous,
+          [activeSource]: [
+            ...actuales,
+            {
+              id: `rule-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+              pattern: patron,
+              isRegex: false,
+              target: "word" as const,
+              color: PALETTE[actuales.length % PALETTE.length],
+            },
+          ],
+        };
+      });
+    },
+    [activeSource],
+  );
+
+  const copySelection = useCallback(async (texto: string) => {
+    setSelectionMenu(null);
+    try {
+      await navigator.clipboard.writeText(texto);
+    } catch {
+      // Sin permiso de portapapeles se copia la selección tal cual, que sigue
+      // activa mientras el menú está abierto.
+      document.execCommand("copy");
+    }
+  }, []);
+
+  // Combinar pestañas: solo cuenta la marca si la pestaña pulsada está dentro
+  // de ella. Así el menú no ofrece combinar un log que no has seleccionado.
+  const combineCount =
+    tabMenu && selectedTabs.includes(tabMenu.tabId) ? selectedTabs.length : 0;
+
+  const combineSelectedTabs = useCallback(() => {
+    if (!tabMenu) return;
+    const elegidas = tabs.filter((tab) => selectedTabs.includes(tab.id));
+    if (elegidas.length < 2) return;
+    setTabMenu(null);
+    setSelectedTabs([]);
+    // Se combinan las rutas: el núcleo vuelve a leer cada fuente con su propio
+    // parser, igual que al combinar desde el navegador de ficheros.
+    void openPaths(
+      elegidas.flatMap((tab) => tab.paths),
+      null,
+    );
+  }, [tabMenu, tabs, selectedTabs, openPaths]);
+
+  // Recargar la interfaz desde el menú de la pestaña: se cierran antes las
+  // sesiones, porque el núcleo en Rust las mantendría vivas y la interfaz nueva
+  // ya no sabría de ellas (fuga de memoria hasta cerrar el programa).
+  const reloadUi = useCallback(async () => {
+    setTabMenu(null);
+    await Promise.all(
+      tabs.map((tab) => invoke("close_session", { sessionId: tab.id }).catch(() => undefined)),
+    );
+    window.location.reload();
+  }, [tabs]);
+
+  const printUi = useCallback(() => {
+    setTabMenu(null);
+    window.print();
+  }, []);
+
   return (
     <div className="app">
       <Toolbar
@@ -251,7 +479,7 @@ export default function App() {
         onColumns={() => setMapperOpen(true)}
         columnsEnabled={!busy && !!active && active.session.sample_lines.length > 1}
         onRules={() => setRulesOpen(true)}
-        rulesCount={rules.length}
+        rulesCount={activeRules.length}
         mask={active?.mask ?? ALL_LEVELS}
         onMaskChange={(value) => active && updateTab(active.id, { mask: value })}
         text={active?.text ?? ""}
@@ -261,6 +489,7 @@ export default function App() {
         onToggleTail={handleToggleTail}
         autoScroll={autoScroll}
         onAutoScrollChange={setAutoScroll}
+        onSettings={() => setSettingsOpen(true)}
         busy={busy}
         disabled={!active}
       />
@@ -270,8 +499,33 @@ export default function App() {
           {tabs.map((tab) => (
             <div
               key={tab.id}
-              className={`tab ${tab.id === activeId ? "active" : ""}`}
-              onClick={() => setActiveId(tab.id)}
+              className={`tab ${tab.id === activeId ? "active" : ""} ${
+                selectedTabs.includes(tab.id) ? "selected" : ""
+              }`}
+              onClick={(event) => {
+                // Ctrl+clic marca pestañas para combinarlas; el clic normal
+                // activa y deja la marca en una sola.
+                if (event.ctrlKey || event.metaKey) {
+                  setSelectedTabs((previous) =>
+                    previous.includes(tab.id)
+                      ? previous.filter((id) => id !== tab.id)
+                      : [...previous, tab.id],
+                  );
+                  return;
+                }
+                setSelectedTabs([tab.id]);
+                setActiveId(tab.id);
+              }}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                setTabMenu({
+                  tabId: tab.id,
+                  label: tab.title,
+                  key: sourceKey(tab.paths),
+                  x: event.clientX,
+                  y: event.clientY,
+                });
+              }}
               title={tab.session.sources.join("\n")}
             >
               {tab.session.merged && <span className="tab-badge" title="Vista combinada">⇄</span>}
@@ -291,7 +545,20 @@ export default function App() {
         </div>
       )}
 
-      {error && <div className="error">{error}</div>}
+      {error && (
+        <div className="error">
+          <span className="error-text" title={error}>
+            {error}
+          </span>
+          <button
+            className="error-close"
+            onClick={() => setError(null)}
+            title="Cerrar el mensaje"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {active ? (
         <LogGrid
@@ -303,7 +570,9 @@ export default function App() {
           fields={active.session.fields}
           merged={active.session.merged}
           autoScroll={autoScroll}
-          rules={rules}
+          onAutoScrollChange={setAutoScroll}
+          onSelectionMenu={setSelectionMenu}
+          rules={activeRules}
           widths={widths}
           onWidthChange={handleWidthChange}
           onTotal={handleTotal}
@@ -315,10 +584,20 @@ export default function App() {
       <FileBrowser
         open={browserOpen}
         onClose={() => setBrowserOpen(false)}
-        onPick={(picked) => {
+        onPick={(picked, mode) => {
           setBrowserOpen(false);
-          if (picked.length > 0) setPaths(picked[0]);
-          void openPaths(picked, null);
+          if (picked.length === 0) return;
+          setPaths(picked[0]);
+          if (mode === "combine") {
+            void openPaths(picked, null);
+            return;
+          }
+          // Abrir varios: cada fichero en su propia pestaña, en orden. Se hace
+          // en serie porque openPaths ya lleva su propio estado de ocupado y
+          // así las pestañas aparecen en el mismo orden en que se marcaron.
+          void (async () => {
+            for (const path of picked) await openPaths([path], null);
+          })();
         }}
       />
 
@@ -333,9 +612,34 @@ export default function App() {
 
       <HighlightRules
         open={rulesOpen}
-        rules={rules}
-        onChange={setRules}
+        rules={activeRules}
+        onChange={setActiveRules}
         onClose={() => setRulesOpen(false)}
+      />
+
+      <TabMenu
+        open={tabMenu}
+        sources={copySources}
+        combineCount={combineCount}
+        onCombine={combineSelectedTabs}
+        onCopy={copyRulesFrom}
+        onReload={() => void reloadUi()}
+        onPrint={printUi}
+        onClose={() => setTabMenu(null)}
+      />
+
+      <SelectionMenu
+        open={selectionMenu}
+        onCopy={(texto) => void copySelection(texto)}
+        onRules={seedRuleFromSelection}
+        onClose={() => setSelectionMenu(null)}
+      />
+
+      <SettingsPanel
+        open={settingsOpen}
+        settings={settings}
+        onChange={setSettings}
+        onClose={() => setSettingsOpen(false)}
       />
 
       <footer className="status">
@@ -349,7 +653,7 @@ export default function App() {
           {active?.tailing ? "tail activo" : "tail parado"}
         </span>
         <span>{tabs.length} pestaña{tabs.length === 1 ? "" : "s"}</span>
-        <span>{rules.length} regla{rules.length === 1 ? "" : "s"}</span>
+        <span>{activeRules.length} regla{activeRules.length === 1 ? "" : "s"}</span>
       </footer>
     </div>
   );

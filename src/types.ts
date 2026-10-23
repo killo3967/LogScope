@@ -45,7 +45,8 @@ export interface HighlightRule {
 }
 
 export const COLUMN_WIDTHS: Record<string, number> = {
-  Time: 176,
+  Date: 104,
+  Time: 120,
   Level: 88,
   Thread: 88,
   Tag: 150,
@@ -126,15 +127,21 @@ export const LEVEL_BIT: Record<Level, number> = {
 
 export const ALL_LEVELS = 127;
 
-export function formatTs(ts: number | null): string {
+export function formatDate(ts: number | null): string {
   if (ts === null) return "";
   const d = new Date(ts);
   const pad = (n: number, w = 2) => String(n).padStart(w, "0");
-  return (
-    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ` +
-    `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.` +
-    `${pad(d.getMilliseconds(), 3)}`
-  );
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+export function formatClock(ts: number | null): string {
+  if (ts === null) return "";
+  const d = new Date(ts);
+  const pad = (n: number, w = 2) => String(n).padStart(w, "0");
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(
+    d.getMilliseconds(),
+    3,
+  )}`;
 }
 
 export function formatBytes(n: number): string {
@@ -147,4 +154,47 @@ export function formatBytes(n: number): string {
     i += 1;
   }
   return `${value.toFixed(1)} ${units[i]}`;
+}
+
+/**
+ * Receta del último conjunto de logs abierto. Guarda las opciones con las que
+ * se abrió, no solo las rutas: sin el parser ni el mapeo, reabrir al arrancar
+ * daría columnas distintas a las de la sesión anterior.
+ */
+export interface LastOpen {
+  paths: string[];
+  parser: ParserKind;
+  pattern: string;
+  delimiter: string;
+  mapping: string[] | null;
+}
+
+export interface Settings {
+  rememberLastOpened: boolean;
+  lastOpen: LastOpen | null;
+  /** Arrancar y abrir cada log con el tail en vivo ya en marcha. */
+  startWithTail: boolean;
+  /** Arrancar con el autoscroll marcado. */
+  startWithAutoScroll: boolean;
+}
+
+export const DEFAULT_SETTINGS: Settings = {
+  rememberLastOpened: true,
+  lastOpen: null,
+  // Por defecto se mantiene el comportamiento de siempre: sin tail y con
+  // autoscroll, para que activar estas opciones sea una decision explicita.
+  startWithTail: false,
+  startWithAutoScroll: true,
+};
+
+/**
+ * Clave estable de un conjunto de logs: sus rutas normalizadas y ordenadas.
+ * Las reglas de color y cualquier preferencia por fichero se guardan con esta
+ * clave, así que sobreviven a reabrir el log (el id de sesión cambia).
+ */
+export function sourceKey(paths: string[]): string {
+  return paths
+    .map((path) => path.replace(/\//g, "\\").toLowerCase())
+    .sort()
+    .join("|");
 }

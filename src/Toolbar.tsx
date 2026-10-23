@@ -25,6 +25,7 @@ interface Props {
   onToggleTail: () => void;
   autoScroll: boolean;
   onAutoScrollChange: (value: boolean) => void;
+  onSettings: () => void;
   busy: boolean;
   disabled: boolean;
 }
@@ -124,6 +125,10 @@ export function Toolbar(props: Props) {
           />
           Autoscroll
         </label>
+
+        <button className="icon" onClick={props.onSettings} title="Ajustes">
+          ⚙
+        </button>
       </div>
 
       <div className="toolbar-row">
