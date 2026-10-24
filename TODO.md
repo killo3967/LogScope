@@ -227,6 +227,32 @@ persistencia va al final, cuando ya exista todo lo que hay que recordar.
       que cruza medianoche y bordes de fecha (día incluido y día siguiente
       excluido), con datos sintéticos. Van junto con la ampliación de `Filters`.
 
+## Plan de arranque
+
+Orden de ejecución propuesto, con el tamaño aproximado de cada fase. Las fases
+1 y 2 son la cáscara; no añaden funciones, solo colocan las que ya hay.
+
+0. **Boceto de la interfaz** (horas): menú de aplicación, barra de dos filas con
+   los controles reducidos, panel de *propiedades del fichero* y sitio del botón
+   del filtro avanzado. Sin código.
+1. **Cáscara de interfaz** (~2-3 h): menú nativo de aplicación, barra reducida y
+   panel de propiedades con Formato, Codificación y Columnas…. Nada de lógica
+   nueva; lo que hoy funciona debe seguir funcionando igual.
+2. **i18n completo** (~2 h): diccionario inglés, selector en Ajustes, `Intl`.
+   Va aquí para no traducir etiquetas que la fase 1 acaba de mover.
+3. **Selección múltiple + exportar y copiar** (~2 h): la primera función nueva.
+4. **Filtro avanzado**, por partes: (a) núcleo con `Filters` ampliado y pruebas;
+   (b) formulario y biblioteca de filtros; (c) grid inferior independiente con su
+   Delta Time; (d) pregunta al abrir y persistencia; (e) ventanas propias.
+5. **Tail en combinadas** (el trabajo delicado del núcleo): insertar por
+   instante, invalidar caché y pruebas de fusión.
+6. **Delta Time del principal, atajos con editor y persistencia por fichero**.
+7. **Publicación**: NSIS, licencia, documentación en inglés, ficha y capturas.
+
+En paralelo y cuando apetezca, sin bloquea nada: la **licencia** (10 minutos) y
+las **dos pruebas manuales pendientes** (rotación del tail y carga de 1 M de
+líneas), que conviene hacer **antes** de tocar el código del tail.
+
 ## Notas de proceso
 
 - Cada release: cerrar `[Unreleased]` del CHANGELOG antes de `bump.cmd X.Y.Z
