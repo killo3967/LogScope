@@ -385,6 +385,22 @@ export function LogGrid({
     return () => window.removeEventListener("keydown", onKey);
   }, [seleccion, copiarSeleccion]);
 
+  // Escape quita la selección, igual que la entrada del menú. Si hay una ventana
+  // modal abierta (ajustes, reglas, propiedades, columnas) o el menú de la
+  // selección, Escape cierra eso primero: una pulsación, una cosa.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      if (document.querySelector(".browser-backdrop")) return;
+      if (menuFilas) return;
+      if (seleccion.size === 0) return;
+      setSeleccion(new Set());
+      setAncla(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [menuFilas, seleccion]);
+
   // El clic derecho abre el menú de texto si hay texto marcado y, si no, el de
   // filas cuando hay filas seleccionadas. Sin nada marcado se deja pasar el
   // menú nativo de WebView2, que es el de siempre.
