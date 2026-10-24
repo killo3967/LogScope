@@ -518,10 +518,37 @@ fn consume_header_tokens<'a>(input: &'a str, parsed: &mut ParsedLine) -> &'a str
             continue;
         }
 
+        // Logger de log4net/NLog: `Logger - mensaje`. Solo se separa cuando ya
+        // hay un nivel delante, que es lo que distingue una cabecera de un
+        // mensaje que empieza por `algo - algo`.
+        if parsed.level != Level::Unknown && !has_field(parsed, "Logger") {
+            if let Some(resto) = logger_before_dash(rest) {
+                push_field(parsed, "Logger", token);
+                rest = resto;
+                continue;
+            }
+        }
+
         break;
     }
 
     rest
+}
+
+/// `logger - mensaje`: devuelve el texto que sigue al separador cuando la
+/// línea empieza por un nombre de logger y un ` - `.
+fn logger_before_dash(input: &str) -> Option<&str> {
+    let end = input
+        .find(|c: char| !(c.is_alphanumeric() || c == '_' || c == '.'))
+        .unwrap_or(input.len());
+    let token = &input[..end];
+
+    // Un nombre de logger no empieza por dígito ni lleva espacios.
+    if token.is_empty() || !token.starts_with(|c: char| c.is_alphabetic() || c == '_') {
+        return None;
+    }
+
+    input[end..].strip_prefix(" - ")
 }
 
 /// Busca un nivel dentro del texto sin asignar memoria: compara cada token
@@ -1160,6 +1187,87 @@ mod tests {
         assert_eq!(parsed.level, Level::Warn);
         let thread = parsed.fields.iter().find(|(n, _)| n == "Thread");
         assert_eq!(thread.map(|(_, v)| v.as_str()), Some("12"));
+    }
+
+    #[test]
+    fn auto_separa_el_logger_de_log4net() {
+        let parser = AutoParser::new();
+        let parsed = parser.parse("2026-10-22 08:00:03,103 [12] WARN App.Servicio.Pedidos - reintento");
+        let campo = |name: &str| {
+            parsed
+                .fields
+                .iter()
+                .find(|(n, _)| n == name)
+                .map(|(_, v)| v.as_str())
+        };
+        assert_eq!(campo("Logger"), Some("App.Servicio.Pedidos"));
+        assert_eq!(campo("Message"), Some("reintento"));
+        assert_eq!(campo("Thread"), Some("12"));
+    }
+
+    #[test]
+    fn auto_admite_logger_de_una_palabra() {
+        let parser = AutoParser::new();
+        let parsed = parser.parse("2026-10-22 08:00:03,103 INFO main - arrancado");
+        let campo = |name: &str| {
+            parsed
+                .fields
+                .iter()
+                .find(|(n, _)| n == name)
+                .map(|(_, v)| v.as_str())
+        };
+        assert_eq!(campo("Logger"), Some("main"));
+        assert_eq!(campo("Message"), Some("arrancado"));
+    }
+
+    #[test]
+    fn auto_no_inventa_logger_sin_nivel_delante() {
+        // Sin nivel no hay cabecera: el ` - ` pertenece al mensaje.
+        let parser = AutoParser::new();
+        let parsed = parser.parse("2026-10-15 10:00:00 hola - adios");
+        assert!(
+            !parsed.fields.iter().any(|(name, _)| name == "Logger"),
+            "no debe separar logger: {:?}",
+            parsed.fields
+        );
+        let campo = |name: &str| {
+            parsed
+                .fields
+                .iter()
+                .find(|(n, _)| n == name)
+                .map(|(_, v)| v.as_str())
+        };
+        assert_eq!(campo("Message"), Some("hola - adios"));
+    }
+
+    #[test]
+    fn auto_no_confunde_el_guion_del_mensaje_con_un_logger() {
+        let parser = AutoParser::new();
+        let parsed = parser.parse("2026-10-15 10:00:00 INFO - inicio");
+        assert!(!parsed.fields.iter().any(|(name, _)| name == "Logger"));
+        let mensaje = parsed
+            .fields
+            .iter()
+            .find(|(n, _)| n == "Message")
+            .map(|(_, v)| v.as_str());
+        assert_eq!(mensaje, Some("- inicio"));
+    }
+
+    #[test]
+    fn auto_no_toma_la_etiqueta_cbs_como_logger() {
+        let parser = AutoParser::new();
+        let parsed = parser
+            .parse("\u{feff}2026-10-15 22:45:21, Info  CBS  TI: --- procesando");
+        let campo = |name: &str| {
+            parsed
+                .fields
+                .iter()
+                .find(|(n, _)| n == name)
+                .map(|(_, v)| v.as_str())
+        };
+        assert_eq!(campo("Tag"), Some("CBS"));
+        assert_eq!(campo("Logger"), None);
+        assert_eq!(campo("Message"), Some("TI: --- procesando"));
     }
 
     #[test]
