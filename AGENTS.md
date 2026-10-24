@@ -25,7 +25,7 @@ las hace el usuario a mano sobre `LogScope.exe`.
 
 ## Antes de empezar
 
-La cola de trabajo acordada está en `PENDIENTES.md`: lo que falta, en orden de
+La cola de trabajo acordada está en `TODO.md`: lo que falta, en orden de
 prioridad, con el motivo de cada cosa. Si la tarea no está allí ni la ha pedido
 el usuario en esta sesión, pregúntale antes de empezar.
 

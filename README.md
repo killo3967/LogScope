@@ -198,4 +198,4 @@ Si vas a compilarlo o a tocar el código, los requisitos, los comandos y las
 pruebas están en [requirements.md](requirements.md). El diseño y las decisiones
 técnicas, en [SPEC.md](SPEC.md), y las reglas de trabajo del repositorio, en
 [AGENTS.md](AGENTS.md). Lo que queda por hacer está en
-[PENDIENTES.md](PENDIENTES.md).
+[TODO.md](TODO.md).
