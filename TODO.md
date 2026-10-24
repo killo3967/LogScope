@@ -30,9 +30,11 @@ los hitos del plan en [SPEC.md](SPEC.md); aquí solo lo que falta.
 
 Peticiones del dueño del proyecto. Orden recomendado: **decidir la interfaz
 (menú y barra) → selección múltiple → filtro avanzado → tail en combinadas →
-Delta Time → exportar y copiar → atajos → persistencia**. La interfaz va primero
-porque decide dónde viven los botones de todo lo demás. La selección es requisito de exportar y copiar; el filtro y el
-tail en combinadas comparten el trabajo del orden por instante; y la
+Delta Time → exportar y copiar → atajos → persistencia**.
+
+Por qué ese orden: la interfaz va primero porque decide dónde viven los botones
+de todo lo demás; la selección múltiple es requisito de exportar y copiar; el
+filtro y el tail en combinadas comparten el trabajo del orden por instante; y la
 persistencia va al final, cuando ya exista todo lo que hay que recordar.
 
 - [ ] **Simplificar la interfaz: menú superior, barra y accesos** (propuesta, sin
