@@ -105,6 +105,10 @@ export const IT: Record<ClaveTexto, string> = {
   // Rejilla de entradas.
   "grid.numeroLineaTooltip": "Numero di riga nel file",
   "grid.anchoTooltip": "Trascina per cambiare la larghezza",
+  "grid.delta": "Delta",
+  "grid.deltaMenu": "Colonna Delta Time",
+  "grid.deltaTooltip": "Tempo trascorso dalla riga precedente del file",
+  "grid.deltaCabeceraTooltip": "Clic destro per aggiungere o rimuovere la colonna Delta Time",
   "grid.cargando": "caricamento…",
 
   // Explorador de ficheros.

@@ -23,6 +23,11 @@ export interface Row {
   fecha: string | null;
   /** Los dígitos del fichero, ya formateados: `08:19:59.826`. */
   hora: string | null;
+  /**
+   * Milisegundos desde la entrada anterior con hora del fichero. `null` en la
+   * primera, en las que no tienen hora y en la que sigue a una sin hora.
+   */
+  delta_ms: number | null;
   level: Level;
   raw: string;
   fields: Field[];
@@ -62,6 +67,7 @@ export interface HighlightRule {
 export const COLUMN_WIDTHS: Record<string, number> = {
   Date: 104,
   Time: 120,
+  Delta: 96,
   Level: 88,
   Thread: 88,
   Tag: 150,
@@ -269,6 +275,24 @@ export function formatClock(ts: number | null): string {
     d.getMilliseconds(),
     3,
   )}`;
+}
+
+/**
+ * Delta Time ya formateado: si cae en segundos exactos se lee en segundos (y
+ * minutos, cuando pasa de uno); con milisegundos se muestra en milisegundos,
+ * que es la única unidad que conserva la precisión del dato. Sin valor, vacío.
+ */
+export function formatDelta(ms: number | null): string {
+  if (ms === null) return "";
+  const signo = ms < 0 ? "-" : "";
+  const valor = Math.abs(ms);
+  if (valor % 1000 !== 0) return `${signo}${valor} ms`;
+  const segundos = valor / 1000;
+  if (segundos === 0) return "0 s";
+  if (segundos < 60) return `${signo}${segundos} s`;
+  const minutos = Math.floor(segundos / 60);
+  const resto = segundos % 60;
+  return resto === 0 ? `${signo}${minutos} min` : `${signo}${minutos} min ${resto} s`;
 }
 
 export function formatBytes(n: number): string {

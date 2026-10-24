@@ -4,7 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useVirtualizer } from "@tanstack/react-virtual";
 
 import type { Filters, HighlightRule, PageResult, Row } from "./types";
-import { COLUMN_WIDTHS, DEFAULT_COLUMN_WIDTH } from "./types";
+import { COLUMN_WIDTHS, DEFAULT_COLUMN_WIDTH, formatDelta } from "./types";
 import { MenuFilas } from "./MenuFilas";
 import { mensajeDeError } from "./errores";
 import { t } from "./textos";
@@ -30,6 +30,9 @@ interface Props {
   generation: number;
   fields: string[];
   merged: boolean;
+  /** Columna Delta Time visible en esta pestaña. */
+  delta: boolean;
+  onDeltaChange: (value: boolean) => void;
   autoScroll: boolean;
   onAutoScrollChange: (value: boolean) => void;
   onSelectionMenu: (menu: { text: string; x: number; y: number } | null) => void;
@@ -52,6 +55,8 @@ export function LogGrid({
   generation,
   fields,
   merged,
+  delta,
+  onDeltaChange,
   autoScroll,
   onAutoScrollChange,
   onSelectionMenu,
@@ -74,17 +79,21 @@ export function LogGrid({
   const [ancla, setAncla] = useState<number | null>(null);
   const [seleccion, setSeleccion] = useState<Set<number>>(() => new Set());
   const [menuFilas, setMenuFilas] = useState<{ x: number; y: number } | null>(null);
+  // Menú de la cabecera de `Time`: la única entrada conmuta la columna Delta.
+  const [menuCabecera, setMenuCabecera] = useState<{ x: number; y: number } | null>(null);
   const [copiando, setCopiando] = useState(false);
   const [exportando, setExportando] = useState(false);
   const [, bump] = useReducer((x: number) => x + 1, 0);
 
-  const columns = useMemo(
-    () =>
-      merged
-        ? ["Date", "Time", "Level", "Source", ...fields]
-        : ["Date", "Time", "Level", ...fields],
-    [merged, fields],
-  );
+  const columns = useMemo(() => {
+    const base = merged
+      ? ["Date", "Time", "Level", "Source", ...fields]
+      : ["Date", "Time", "Level", ...fields];
+    if (!delta) return base;
+    // Delta va pegada a Time: es su lectura derivada.
+    const trasTime = base.indexOf("Time") + 1;
+    return [...base.slice(0, trasTime), "Delta", ...base.slice(trasTime)];
+  }, [merged, fields, delta]);
   const columnWidths = columns.map(
     (name) => widths[name] ?? COLUMN_WIDTHS[name] ?? DEFAULT_COLUMN_WIDTH,
   );
@@ -431,12 +440,17 @@ export function LogGrid({
   }, [seleccion, copiarSeleccion]);
 
   // Escape quita la selección, igual que la entrada del menú. Si hay una ventana
-  // modal abierta (ajustes, reglas, propiedades, columnas) o el menú de la
-  // selección, Escape cierra eso primero: una pulsación, una cosa.
+  // modal abierta (ajustes, reglas, propiedades, columnas) o un menú (el de la
+  // cabecera o el de la selección), Escape cierra eso primero: una pulsación,
+  // una cosa.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       if (document.querySelector(".browser-backdrop")) return;
+      if (menuCabecera) {
+        setMenuCabecera(null);
+        return;
+      }
       if (menuFilas) return;
       if (seleccion.size === 0) return;
       setSeleccion(new Set());
@@ -444,7 +458,7 @@ export function LogGrid({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [menuFilas, seleccion]);
+  }, [menuCabecera, menuFilas, seleccion]);
 
   // El clic derecho abre el menú de texto si hay texto marcado y, si no, el de
   // filas cuando hay filas seleccionadas. Sin nada marcado se deja pasar el
@@ -469,6 +483,15 @@ export function LogGrid({
     },
     [onSelectionMenu, seleccion],
   );
+
+  // Clic derecho en la cabecera de `Time` abre el menú de la columna Delta. En
+  // el resto de cabeceras se deja pasar al menú de filas/texto de siempre.
+  const handleHeaderContextMenu = useCallback((name: string, event: React.MouseEvent) => {
+    if (name !== "Time") return;
+    event.preventDefault();
+    event.stopPropagation();
+    setMenuCabecera({ x: event.clientX, y: event.clientY });
+  }, []);
 
   const handleWheel = useCallback(
     (event: React.WheelEvent) => {
@@ -513,6 +536,7 @@ export function LogGrid({
     // Date`, que convertiría a la zona del navegador.
     if (name === "Date") return row.fecha ?? "";
     if (name === "Time") return row.hora ?? "";
+    if (name === "Delta") return formatDelta(row.delta_ms);
     if (name === "Level") return row.level;
     if (name === "Source") return row.source;
     return row.fields.find((field) => field.name === name)?.value ?? "";
@@ -555,8 +579,16 @@ export function LogGrid({
               key={name}
               className={`col-head col-${name.toLowerCase()}`}
               style={{ width: columnWidths[index], minWidth: columnWidths[index] }}
+              title={
+                name === "Time"
+                  ? t("grid.deltaCabeceraTooltip")
+                  : name === "Delta"
+                    ? t("grid.deltaTooltip")
+                    : undefined
+              }
+              onContextMenu={(event) => handleHeaderContextMenu(name, event)}
             >
-              {name}
+              {name === "Delta" ? t("grid.delta") : name}
               <span
                 className="resizer"
                 title={t("grid.anchoTooltip")}
@@ -624,6 +656,33 @@ export function LogGrid({
           `position: fixed` se resolvería contra la rejilla, no contra la
           ventana. El portal lo cuelga del `body` para que el menú aparezca
           donde está el puntero. */}
+      {createPortal(
+        menuCabecera ? (
+          <>
+            <div className="menu-backdrop" onClick={() => setMenuCabecera(null)} />
+            <div
+              className="context-menu"
+              style={{
+                left: Math.min(menuCabecera.x, window.innerWidth - 320),
+                top: Math.min(menuCabecera.y, window.innerHeight - 160),
+              }}
+            >
+              <div className="menu-title">Time</div>
+              <button
+                className="menu-item"
+                onClick={() => {
+                  onDeltaChange(!delta);
+                  setMenuCabecera(null);
+                }}
+              >
+                <span className="menu-label">{t("grid.deltaMenu")}</span>
+                {delta ? <span className="menu-count">✓</span> : null}
+              </button>
+            </div>
+          </>
+        ) : null,
+        document.body,
+      )}
       {createPortal(
         <MenuFilas
           open={menuFilas}

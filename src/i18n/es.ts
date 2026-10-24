@@ -107,6 +107,10 @@ export const ES = {
   // Rejilla de entradas.
   "grid.numeroLineaTooltip": "Número de línea en el fichero",
   "grid.anchoTooltip": "Arrastra para cambiar el ancho",
+  "grid.delta": "Delta",
+  "grid.deltaMenu": "Columna Delta Time",
+  "grid.deltaTooltip": "Tiempo transcurrido desde la línea anterior del fichero",
+  "grid.deltaCabeceraTooltip": "Clic derecho para añadir o quitar la columna Delta Time",
   "grid.cargando": "cargando…",
 
   // Explorador de ficheros.

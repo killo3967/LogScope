@@ -60,6 +60,8 @@ interface Tab {
   text: string;
   /** Consulta estructurada de la pestaña; sustituye a `mask` y `text`. */
   filtro?: FiltroAvanzadoModelo | null;
+  /** Columna Delta Time visible, conmutada desde la cabecera de `Time`. */
+  delta: boolean;
   tailing: boolean;
   mapping: string[] | null;
   generation: number;
@@ -223,6 +225,7 @@ export default function App() {
           mask: ALL_LEVELS,
           text: "",
           filtro: null,
+          delta: false,
           tailing,
           mapping,
           generation: 0,
@@ -776,6 +779,8 @@ export default function App() {
           generation={active.generation}
           fields={active.session.fields}
           merged={active.session.merged}
+          delta={active.delta}
+          onDeltaChange={(value) => updateTab(active.id, { delta: value })}
           autoScroll={autoScroll}
           onAutoScrollChange={setAutoScroll}
           onSelectionMenu={setSelectionMenu}

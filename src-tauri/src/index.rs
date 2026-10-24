@@ -210,6 +210,25 @@ impl EntryTable {
         }
     }
 
+    /// Diferencia entre el instante real de esta entrada y el de la anterior
+    /// del fichero. `None` si la entrada no trae hora, si es la primera con
+    /// hora o si la anterior no la tenía: la serie se corta en el hueco en vez
+    /// de saltar por encima de él.
+    ///
+    /// Es una resta de instantes reales (con la zona del fichero), así que un
+    /// cambio de hora no la falsea.
+    pub fn delta_at(&self, index: usize) -> Option<i64> {
+        let actual = self.instant_at(index);
+        if actual == NO_TS || index == 0 {
+            return None;
+        }
+        let anterior = self.instant_at(index - 1);
+        if anterior == NO_TS {
+            return None;
+        }
+        Some(actual - anterior)
+    }
+
     fn push_line(&mut self, text: &str) {
         let line_no = self.lines_seen;
         let parsed = self.parser.parse(text);
@@ -429,6 +448,7 @@ impl EntryTable {
             ts_ms: if pared == NO_TS { None } else { Some(pared) },
             fecha,
             hora,
+            delta_ms: self.delta_at(index),
             level: Level::from_u8(self.level[index]),
             fields: parsed
                 .fields
@@ -743,11 +763,33 @@ impl LogSet {
         self.invalidate();
     }
 
+    /// Diferencia entre el instante real de la fila visible `index` y el de la
+    /// fila anterior de la vista (la del fichero si hay una sola fuente, la del
+    /// orden combinado si hay varias). `None` si la fila no tiene hora, si es la
+    /// primera con hora o si la anterior no la tenía.
+    ///
+    /// **No depende de los filtros**: se calcula sobre posiciones del orden
+    /// completo, no sobre las filas visibles.
+    pub fn delta_at(&self, index: usize) -> Option<i64> {
+        let actual = self.instant_at(index);
+        if actual == NO_TS || index == 0 {
+            return None;
+        }
+        let anterior = self.instant_at(index - 1);
+        if anterior == NO_TS {
+            return None;
+        }
+        Some(actual - anterior)
+    }
+
     pub fn row(&self, index: usize) -> Row {
         let (_, source_index, entry) = self.order[index];
         let source = &self.sources[source_index as usize];
         let mut row = source.table.row(entry as usize);
         row.index = index as u32;
+        // En la vista combinada la fila anterior puede ser de otra fuente: el
+        // delta se recalcula sobre el orden combinado, no sobre el fichero.
+        row.delta_ms = self.delta_at(index);
         row.source = if self.merged {
             source.name.clone()
         } else {
@@ -971,6 +1013,87 @@ mod tests {
         t.ingest_bytes(b"linea suelta sin instante\n");
         t.set_zona(Some(120));
         assert_eq!(t.instant_at(0), NO_TS);
+    }
+
+    #[test]
+    fn el_delta_es_la_resta_con_la_entrada_anterior() {
+        let mut t = EntryTable::new(BasicParser::new());
+        t.ingest_bytes(
+            b"2026-10-22 10:00:00 INFO uno\n2026-10-22 10:00:02 INFO dos\n2026-10-22 10:01:02 INFO tres\n",
+        );
+
+        assert_eq!(t.delta_at(0), None, "la primera con hora no tiene anterior");
+        assert_eq!(t.delta_at(1), Some(2_000));
+        assert_eq!(t.delta_at(2), Some(60_000));
+        assert_eq!(t.row(1).delta_ms, Some(2_000), "la fila lleva el delta");
+    }
+
+    #[test]
+    fn el_delta_se_corta_en_las_entradas_sin_hora() {
+        let mut t = EntryTable::new(BasicParser::new());
+        t.ingest_bytes(
+            b"2026-10-22 10:00:00 INFO uno\nlinea sin hora\n2026-10-22 10:00:05 INFO dos\n2026-10-22 10:00:07 INFO tres\n",
+        );
+        assert_eq!(t.len(), 4);
+
+        assert_eq!(t.delta_at(0), None);
+        assert_eq!(t.delta_at(1), None, "sin hora no hay delta");
+        assert_eq!(
+            t.delta_at(2),
+            None,
+            "la serie se corta tras una entrada sin hora: no se inventa el salto"
+        );
+        assert_eq!(t.delta_at(3), Some(2_000), "después del corte, se reanuda");
+    }
+
+    #[test]
+    fn el_delta_no_cambia_al_filtrar_la_vista() {
+        let mut t = EntryTable::new(BasicParser::new());
+        t.ingest_bytes(
+            b"2026-10-22 10:00:00 INFO arranque\n\
+              2026-10-22 10:00:01 DEBUG ruido uno\n\
+              2026-10-22 10:00:03 ERROR fallo\n\
+              2026-10-22 10:00:09 ERROR otro fallo\n",
+        );
+
+        let filtro = Filters {
+            levels: Some(Level::Error.bit()),
+            text: None,
+            avanzado: None,
+        };
+        let visibles = t.matching_indices(&filtro);
+        assert_eq!(visibles, vec![2, 3]);
+
+        // El delta sale del fichero, no de las filas visibles: el primer error
+        // mide contra el DEBUG intermedio (2 s) y el segundo contra el primer
+        // error (6 s), aunque en la vista filtrada sean consecutivos.
+        assert_eq!(t.delta_at(visibles[0] as usize), Some(2_000));
+        assert_eq!(t.delta_at(visibles[1] as usize), Some(6_000));
+
+        let pagina = t.page(&visibles, 0, visibles.len());
+        assert_eq!(pagina[0].delta_ms, Some(2_000));
+        assert_eq!(pagina[1].delta_ms, Some(6_000));
+    }
+
+    #[test]
+    fn el_delta_de_la_vista_combinada_sigue_el_orden_combinado() {
+        let a = fuente(
+            "a.log",
+            b"2026-10-22 10:00:00 INFO a0\n2026-10-22 10:00:04 INFO a1\n",
+        );
+        let b = fuente(
+            "b.log",
+            b"2026-10-22 10:00:01 INFO b0\n2026-10-22 10:00:02 INFO b1\n",
+        );
+        let set = LogSet::new(vec![a, b]);
+
+        let deltas: Vec<Option<i64>> = (0..4).map(|index| set.delta_at(index)).collect();
+        assert_eq!(
+            deltas,
+            vec![None, Some(1_000), Some(1_000), Some(2_000)],
+            "cada fila mide contra la anterior de la vista, sea de la fuente que sea"
+        );
+        assert_eq!(set.row(2).delta_ms, Some(1_000));
     }
 
     #[test]

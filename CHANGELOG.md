@@ -18,6 +18,11 @@ Mientras la versión mayor sea `0`, la parte menor puede romper compatibilidad:
 
 ### Añadido
 
+- **Columna Delta Time**: desde el menú contextual de la cabecera `Time` se añade
+  una columna `Delta` con el tiempo entre líneas, calculado **sobre todas las
+  filas del fichero** (no solo las visibles): en milisegundos si la diferencia no
+  es un segundo exacto, y en segundos o minutos enteros cuando lo es. La serie se
+  corta en las líneas sin hora. El estado es por pestaña.
 - **Tail en vivo en vistas combinadas**: se vigila cada fichero por separado y las
   líneas nuevas se insertan en su sitio por instante, con coste proporcional a lo
   que entra. Al entrar líneas la selección se descarta, porque los números de

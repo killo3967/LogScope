@@ -74,6 +74,11 @@ pub struct Row {
     pub fecha: Option<String>,
     /// Hora ya formateada (`%H:%M:%S%.3f`) desde la hora de pared.
     pub hora: Option<String>,
+    /// Tiempo transcurrido, en milisegundos, desde la entrada anterior **con
+    /// hora** del fichero (o del orden combinado). `None` en la primera con
+    /// hora, en las que no la tienen y en la que sigue a una sin hora: ahí la
+    /// serie se corta, no se inventa un salto.
+    pub delta_ms: Option<i64>,
     pub level: Level,
     pub raw: String,
     pub fields: Vec<Field>,
