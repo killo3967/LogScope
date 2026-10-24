@@ -137,6 +137,7 @@ fn carga_un_millon_de_lineas() {
     let errors = table.matching_indices(&Filters {
         levels: Some(Level::Error.bit()),
         text: None,
+        avanzado: None,
     });
     println!(
         "filtro por nivel a 1M: {} coincidencias en {:?}",
@@ -148,6 +149,7 @@ fn carga_un_millon_de_lineas() {
     let text_hits = table.matching_indices(&Filters {
         levels: None,
         text: Some("pasarela de pago".to_string()),
+        avanzado: None,
     });
     println!(
         "búsqueda de texto a 1M: {} coincidencias en {:?}",
@@ -219,6 +221,7 @@ fn filtra_la_muestra_por_nivel_y_texto() {
     let errors = table.matching_indices(&Filters {
         levels: Some(Level::Error.bit()),
         text: None,
+        avanzado: None,
     });
     println!(
         "filtro por nivel: {} de {} líneas en {:?}",
@@ -233,6 +236,7 @@ fn filtra_la_muestra_por_nivel_y_texto() {
     let hits = table.matching_indices(&Filters {
         levels: None,
         text: Some("pasarela de pago".to_string()),
+        avanzado: None,
     });
     println!(
         "búsqueda de texto: {} coincidencias en {:?}",

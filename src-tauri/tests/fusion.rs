@@ -143,6 +143,7 @@ fn el_filtro_funciona_en_la_vista_combinada() {
     let visibles = set.visible(&logscope_lib::index::Filters {
         levels: Some(logscope_lib::model::Level::Error.bit()),
         text: None,
+        avanzado: None,
     });
     println!("filas de nivel error en la vista combinada: {}", visibles.len());
     assert!(!visibles.is_empty());

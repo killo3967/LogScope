@@ -81,8 +81,11 @@ fn local_offset_seconds(date: NaiveDate) -> i32 {
 }
 
 fn to_ms(naive: NaiveDateTime) -> Option<i64> {
+    // `naive` es la hora de pared del log, en hora local: el instante real es
+    // esa hora interpretada como UTC MENOS el desfase local. Sumándolo, el visor
+    // mostraba las horas desplazadas el doble del desfase (4 h en verano).
     let offset = local_offset_seconds(naive.date()) as i64;
-    Some(naive.and_utc().timestamp_millis() + offset * 1000)
+    Some(naive.and_utc().timestamp_millis() - offset * 1000)
 }
 
 /// Reconoce un instante al principio de la línea en los formatos más comunes.

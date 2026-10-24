@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 use serde::Deserialize;
 
 use crate::encoding::{tiene_multibyte_valido, Decoder as TextDecoder, Encoding as TextEncoding};
+use crate::filtro::{FiltroAvanzado, FiltroListo};
 use crate::model::{Field, Level, Row};
 use crate::parser::{LogParser, NO_TS};
 
@@ -32,17 +33,22 @@ pub struct EntryTable {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[serde(default)]
 pub struct Filters {
     /// Máscara de niveles; `None` equivale a todos.
     pub levels: Option<u8>,
     /// Búsqueda textual sin distinguir mayúsculas.
     pub text: Option<String>,
+    /// Filtro avanzado, ya evaluado por el núcleo. Se guarda como modelo (sin
+    /// nada compilado) para que `PartialEq` siga sirviendo de clave de caché.
+    pub avanzado: Option<FiltroAvanzado>,
 }
 
 impl Filters {
     pub fn is_active(&self) -> bool {
         self.levels.is_some_and(|m| m != crate::model::ALL_LEVELS)
             || self.text.as_ref().is_some_and(|t| !t.is_empty())
+            || self.avanzado.as_ref().is_some_and(FiltroAvanzado::restringe)
     }
 }
 
@@ -300,21 +306,39 @@ impl EntryTable {
             .filter(|t| !t.is_empty())
             .map(|t| t.to_lowercase());
         let ascii_only = needle_lower.as_deref().is_some_and(str::is_ascii);
+        // Lo caro del filtro avanzado se compila una sola vez por pasada.
+        let mut avanzado = FiltroListo::desde(filters.avanzado.as_ref());
 
         (0..self.len())
-            .filter(|index| self.matches_entry(*index, filters, needle_lower.as_deref(), ascii_only))
+            .filter(|index| {
+                self.matches_entry(
+                    *index,
+                    filters,
+                    needle_lower.as_deref(),
+                    ascii_only,
+                    avanzado.as_mut(),
+                    "",
+                )
+            })
             .map(|index| index as u32)
             .collect()
     }
 
     /// ¿La entrada `index` pasa el filtro? Lo usan tanto la tabla suelta como
     /// la vista combinada.
+    ///
+    /// `avanzado` es el filtro avanzado ya compilado (una sola vez por pasada)
+    /// y `fuente` el nombre del fichero de origen, necesario para las
+    /// condiciones de fuente; en una tabla suelta se pasa `""`. El orden es de
+    /// barato a caro: niveles, texto y, al final, el filtro avanzado.
     pub fn matches_entry(
         &self,
         index: usize,
         filters: &Filters,
         needle_lower: Option<&str>,
         ascii_only: bool,
+        avanzado: Option<&mut FiltroListo>,
+        fuente: &str,
     ) -> bool {
         if let Some(mask) = filters.levels {
             if mask & (1u8 << self.level[index].min(6)) == 0 {
@@ -334,7 +358,22 @@ impl EntryTable {
                 return false;
             }
         }
+        if let Some(listo) = avanzado {
+            if !listo.coincide(self, index, fuente) {
+                return false;
+            }
+        }
         true
+    }
+
+    /// Nombre del nivel de la entrada, sin volver a parsearla.
+    pub fn level_at(&self, index: usize) -> Level {
+        Level::from_u8(self.level[index])
+    }
+
+    /// Texto completo de la entrada (todas sus líneas), ya decodificado.
+    pub fn raw_at(&self, index: usize) -> String {
+        self.raw_of(index)
     }
 
     fn raw_of(&self, index: usize) -> String {
@@ -564,16 +603,20 @@ impl LogSet {
             .filter(|t| !t.is_empty())
             .map(|t| t.to_lowercase());
         let ascii_only = needle_lower.as_deref().is_some_and(str::is_ascii);
+        let mut avanzado = FiltroListo::desde(filters.avanzado.as_ref());
 
         let list: Vec<u32> = if filters.is_active() {
             (0..self.order.len())
                 .filter(|index| {
                     let (_, source_index, entry) = self.order[*index];
-                    self.sources[source_index as usize].table.matches_entry(
+                    let source = &self.sources[source_index as usize];
+                    source.table.matches_entry(
                         entry as usize,
                         filters,
                         needle_lower.as_deref(),
                         ascii_only,
+                        avanzado.as_mut(),
+                        &source.name,
                     )
                 })
                 .map(|index| index as u32)
@@ -623,6 +666,7 @@ mod tests {
         let f = Filters {
             levels: Some(Level::Error.bit()),
             text: None,
+            avanzado: None,
         };
         assert_eq!(t.matching_indices(&f), vec![1]);
     }
@@ -847,6 +891,7 @@ mod tests {
         let visibles = set.visible(&Filters {
             levels: Some(Level::Error.bit()),
             text: None,
+            avanzado: None,
         });
         assert_eq!(visibles.len(), 1);
         assert_eq!(set.row(visibles[0] as usize).level, Level::Error);

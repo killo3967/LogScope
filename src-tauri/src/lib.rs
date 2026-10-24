@@ -1,5 +1,6 @@
 pub mod columnizers;
 pub mod encoding;
+pub mod filtro;
 pub mod fsbrowse;
 pub mod index;
 pub mod model;

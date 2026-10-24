@@ -9,6 +9,14 @@ Mientras la versión mayor sea `0`, la parte menor puede romper compatibilidad:
 
 ## [Unreleased]
 
+### Corregido
+
+- Las columnas **Date** y **Time** mostraban la hora desplazada el doble del
+  desfase horario: un log escrito a las 08:19 se veía a las 12:19 en un equipo en
+  horario de verano. El instante se guardaba sumando el desfase local en vez de
+  restarlo. También afecta al filtro por franja horaria, que ahora coincide con lo
+  que se ve en pantalla y con lo que dice el fichero.
+
 ### Añadido
 
 - **Selección múltiple de líneas** en el grid (Mayús+clic para un rango, Ctrl+clic

@@ -38,6 +38,20 @@ impl Level {
     pub fn bit(self) -> u8 {
         1u8 << (self as u8).min(6)
     }
+
+    /// Nombre del nivel tal y como se escribe en los logs. Lo usa el filtro
+    /// avanzado para comparar contra `error`, `warn`…
+    pub fn name(self) -> &'static str {
+        match self {
+            Level::Trace => "trace",
+            Level::Debug => "debug",
+            Level::Info => "info",
+            Level::Warn => "warn",
+            Level::Error => "error",
+            Level::Fatal => "fatal",
+            Level::Unknown => "unknown",
+        }
+    }
 }
 
 pub const ALL_LEVELS: u8 = 0b0111_1111;
