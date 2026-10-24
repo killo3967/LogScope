@@ -1,4 +1,5 @@
 pub mod columnizers;
+pub mod encoding;
 pub mod fsbrowse;
 pub mod index;
 pub mod model;
@@ -69,12 +70,17 @@ pub struct OpenOptions {
     /// Papel de cada sub-línea de la entrada, fijado a mano:
     /// `time | level | thread | tag | logger | message | ignore`.
     pub mapping: Option<Vec<String>>,
+    /// Codificación del fichero: `auto` (por defecto) o una forzada.
+    #[serde(default)]
+    pub encoding: Option<String>,
 }
 
 #[derive(Serialize)]
 pub struct OpenResult {
     pub session_id: String,
     pub parser: String,
+    /// Codificación con la que se ha leído, ya resuelta (`utf16le`, `windows1252`…).
+    pub encoding: String,
     pub entries: usize,
     pub bytes: u64,
     /// Solo los campos que el fichero trae de verdad.
@@ -102,20 +108,32 @@ pub struct Stats {
     pub tailing: bool,
 }
 
-fn head_lines(head: &[u8], max: usize) -> Vec<String> {
-    let text = String::from_utf8_lossy(head);
-    text.split('\n')
+fn head_lines(head: &[u8], max: usize, encoding: crate::encoding::Encoding) -> Vec<String> {
+    // Un log UTF-16 leído como UTF-8 da `2 4 / 1 0…`: hay que convertirlo antes
+    // de mirar la cabecera, o la detección de formato no acierta nunca.
+    let mut decoder = crate::encoding::Decoder::new(encoding, head);
+    let texto = match decoder.decode(head) {
+        Some(texto) => texto,
+        None => String::from_utf8_lossy(head).into_owned(),
+    };
+    texto
+        .split('\n')
         .map(|line| line.trim_end_matches('\r').trim_start_matches('\u{feff}').to_string())
         .filter(|line| !line.trim().is_empty())
         .take(max)
         .collect()
 }
 
+/// Codificación pedida en las opciones, ya resuelta contra la cabecera.
+fn encoding_de(options: &OpenOptions) -> crate::encoding::Encoding {
+    crate::encoding::Encoding::from_name(options.encoding.as_deref().unwrap_or("auto"))
+}
+
 fn build_parser(options: &OpenOptions, head: &[u8]) -> Result<Arc<dyn LogParser>, String> {
     // Por defecto, automático: agrupa entradas de varias líneas y, en logs de
     // una sola línea, se comporta como `basic`.
     let kind = options.parser.as_deref().unwrap_or("auto");
-    let sample = head_lines(head, 30);
+    let sample = head_lines(head, 30, encoding_de(options));
     match kind {
         "auto" => {
             if let Some(roles) = options.mapping.as_ref() {
@@ -207,7 +225,7 @@ fn load_source(path: &PathBuf, options: &OpenOptions) -> Result<EntryTable, Stri
     head.truncate(read);
 
     let parser = build_parser(options, &head)?;
-    let mut table = EntryTable::new(parser);
+    let mut table = EntryTable::with_encoding(parser, encoding_de(options));
     table.ingest_bytes(&head);
 
     let mut buf = vec![0u8; CHUNK];
@@ -257,6 +275,7 @@ pub fn deteccion_automatica(head: &[u8]) -> Arc<dyn LogParser> {
         pattern: None,
         delimiter: None,
         mapping: None,
+        encoding: None,
     };
     build_parser(&options, head).unwrap_or_else(|_| AutoParser::new())
 }
@@ -314,6 +333,7 @@ fn open_files(
     let result = OpenResult {
         session_id: id.clone(),
         parser: set.parser_name(),
+        encoding: set.encoding_name(),
         entries: set.len(),
         bytes: set.consumed(),
         fields: set.present_fields(200),
@@ -462,6 +482,7 @@ mod tests {
             pattern: None,
             delimiter: None,
             mapping: None,
+            encoding: None,
         }
     }
 
@@ -509,5 +530,112 @@ mod tests {
         assert_eq!(set.len(), 1);
         assert!(!set.is_merged());
         let _ = std::fs::remove_file(sin);
+    }
+
+    /// Escribe el texto como UTF-16LE con BOM, que es como lo hace eMule.
+    fn escribe_utf16(nombre: &str, contenido: &str) -> PathBuf {
+        let mut path = std::env::temp_dir();
+        path.push(format!("logscope-utf16-{nombre}.log"));
+        let mut bytes = vec![0xFF, 0xFE];
+        for unidad in contenido.encode_utf16() {
+            bytes.extend_from_slice(&unidad.to_le_bytes());
+        }
+        std::fs::write(&path, bytes).unwrap();
+        path
+    }
+
+    #[test]
+    fn abre_un_log_utf16le_sin_espacios_entre_letras() {
+        // Caso real: eMule_Verbose.log. Leído como UTF-8 se veía
+        // `C l i e n t   r o w` y no se reconocían ni el instante ni el nivel.
+        let contenido = concat!(
+            "24/10/2026 10:55:36: Client row update event dropped because target is stale.\r\n",
+            "24/10/2026 10:55:40: Stopping Kadmelia\r\n",
+            "24/10/2026 10:55:41: ERROR no se pudo guardar la sesión\r\n",
+        );
+        let path = escribe_utf16("emule", contenido);
+
+        let set = load_sources(&[path.clone()], &opciones()).expect("debería abrirse");
+        assert_eq!(set.len(), 3, "una entrada por línea");
+
+        let primera = set.row(0);
+        assert!(
+            primera.raw.contains("Client row update event dropped"),
+            "el texto debe llegar sin ceros intercalados: {:?}",
+            primera.raw
+        );
+        assert!(!primera.raw.contains('\u{0}'), "sin NUL en el texto");
+        assert!(primera.ts_ms.is_some(), "debe reconocer el instante");
+        assert_eq!(set.row(2).level, crate::model::Level::Error);
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    /// Escribe los bytes tal cual, para probar codificaciones forzadas.
+    fn escribe_bytes(nombre: &str, bytes: &[u8]) -> PathBuf {
+        let mut path = std::env::temp_dir();
+        path.push(format!("logscope-encoding-{nombre}.log"));
+        std::fs::write(&path, bytes).unwrap();
+        path
+    }
+
+    #[test]
+    fn abre_un_log_cp850_cuando_se_fuerza_la_codificacion() {
+        // Página OEM de consola: la ó es 0xA2, no 0xF3 ni la de UTF-8.
+        let mut bytes = b"2026-10-24 10:00:00 INFO sesi".to_vec();
+        bytes.push(0xA2);
+        bytes.extend_from_slice(b"n creada\r\n");
+        let path = escribe_bytes("cp850", &bytes);
+
+        let mut opciones = opciones();
+        opciones.encoding = Some("cp850".to_string());
+        let set = load_sources(&[path.clone()], &opciones).expect("debería abrirse");
+
+        assert_eq!(set.len(), 1);
+        assert!(
+            set.row(0).raw.contains("sesión creada"),
+            "texto mal decodificado: {:?}",
+            set.row(0).raw
+        );
+        assert_eq!(set.encoding_name(), "cp850");
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn abre_un_log_utf32le() {
+        let mut bytes = vec![0xFF, 0xFE, 0x00, 0x00];
+        for caracter in "2026-10-24 10:00:00 INFO primera\r\n2026-10-24 10:00:01 ERROR segunda\r\n"
+            .chars()
+        {
+            bytes.extend_from_slice(&(caracter as u32).to_le_bytes());
+        }
+        let path = escribe_bytes("utf32le", &bytes);
+
+        let set = load_sources(&[path.clone()], &opciones()).expect("debería abrirse");
+        assert_eq!(set.len(), 2, "una entrada por línea");
+        assert!(set.row(0).raw.contains("primera"), "{:?}", set.row(0).raw);
+        assert!(set.row(0).ts_ms.is_some(), "debe reconocer el instante");
+        assert_eq!(set.row(1).level, crate::model::Level::Error);
+        assert_eq!(set.encoding_name(), "utf32le");
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn una_linea_utf8_con_un_byte_roto_conserva_sus_acentos() {
+        // Mezcla real: texto UTF-8 y un byte suelto que no lo es. Antes la línea
+        // entera se decodificaba como Windows-1252 y salía «sesiÃ³n».
+        let mut bytes = "2026-10-24 10:00:00 INFO sesión con acentos ".as_bytes().to_vec();
+        bytes.push(0xFF);
+        bytes.extend_from_slice(b" y mas texto\r\n");
+        let path = escribe_bytes("utf8-roto", &bytes);
+
+        let set = load_sources(&[path.clone()], &opciones()).expect("debería abrirse");
+        let raw = set.row(0).raw.clone();
+        assert!(raw.contains("sesión con acentos"), "{raw:?}");
+        assert!(!raw.contains("sesiÃ³n"), "no debe reinterpretarse como 1252: {raw:?}");
+
+        let _ = std::fs::remove_file(path);
     }
 }

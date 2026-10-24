@@ -51,6 +51,11 @@ const CASOS: &[Caso] = &[
         parsers: &["auto"],
     },
     Caso {
+        nombre: "eMule en UTF-16LE con BOM",
+        ruta: r"K:\LogScope\samples\emule-utf16.log",
+        parsers: &["auto"],
+    },
+    Caso {
         nombre: "multilínea de 4 líneas",
         ruta: r"K:\LogScope\samples\multiline.log",
         parsers: &["auto"],

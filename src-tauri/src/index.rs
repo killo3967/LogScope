@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex};
 
 use serde::Deserialize;
 
+use crate::encoding::{tiene_multibyte_valido, Decoder as TextDecoder, Encoding as TextEncoding};
 use crate::model::{Field, Level, Row};
 use crate::parser::{LogParser, NO_TS};
 
@@ -24,6 +25,10 @@ pub struct EntryTable {
     lines_seen: u32,
     /// Líneas que lleva la entrada en construcción.
     last_entry_lines: u32,
+    /// Conversión a UTF-8 cuando el fichero no lo es (UTF-16 de eMule, .NET…).
+    decoder: TextDecoder,
+    /// Codificación pedida al abrir; `Auto` deja decidir a la detección.
+    encoding: TextEncoding,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Deserialize)]
@@ -74,14 +79,27 @@ fn decode(bytes: &[u8]) -> String {
     match std::str::from_utf8(bytes) {
         Ok(text) => text.to_string(),
         Err(_) => {
+            // Una línea UTF-8 con un byte corrupto no debe reescribirse entera
+            // en Windows-1252 («sesiÃ³n»): si hay UTF-8 multibyte válido, se
+            // sustituye solo lo que está mal. Un texto de 8 bits no tiene ni
+            // una sola secuencia multibyte válida.
+            if tiene_multibyte_valido(bytes) {
+                return String::from_utf8_lossy(bytes).into_owned();
+            }
             let (cow, _, _) = encoding_rs::WINDOWS_1252.decode(bytes);
             cow.into_owned()
         }
     }
 }
 
+
 impl EntryTable {
     pub fn new(parser: Arc<dyn LogParser>) -> Self {
+        Self::with_encoding(parser, TextEncoding::Auto)
+    }
+
+    /// Igual que `new`, pero forzando la codificación del fichero.
+    pub fn with_encoding(parser: Arc<dyn LogParser>, encoding: TextEncoding) -> Self {
         EntryTable {
             arena: Vec::new(),
             starts: Vec::new(),
@@ -94,7 +112,14 @@ impl EntryTable {
             parser,
             lines_seen: 0,
             last_entry_lines: 0,
+            decoder: TextDecoder::passthrough(),
+            encoding,
         }
+    }
+
+    /// Codificación con la que se está leyendo de verdad, ya resuelta.
+    pub fn encoding_name(&self) -> &'static str {
+        self.decoder.encoding().name()
     }
 
     pub fn len(&self) -> usize {
@@ -135,6 +160,8 @@ impl EntryTable {
         self.consumed = 0;
         self.lines_seen = 0;
         self.last_entry_lines = 0;
+        // Tras una rotación el fichero nuevo puede tener otra codificación.
+        self.decoder = TextDecoder::passthrough();
     }
 
     pub fn ts_at(&self, index: usize) -> i64 {
@@ -198,8 +225,24 @@ impl EntryTable {
 
     /// Ingiere un bloque de bytes, conservando la línea incompleta final.
     pub fn ingest_bytes(&mut self, bytes: &[u8]) {
-        self.pending.extend_from_slice(bytes);
+        // La codificación se decide con el primer bloque: los ficheros UTF-16
+        // (eMule, .NET) llegarían con un cero entre cada letra y no se
+        // reconocería ni el instante.
+        if self.consumed == 0 {
+            self.decoder = TextDecoder::new(self.encoding, bytes);
+        }
+
+        // `consumed` cuenta SIEMPRE bytes del fichero, no del texto convertido:
+        // el tail calcula desde ahí la posición de lectura.
         self.consumed += bytes.len() as u64;
+
+        let convertido = self.decoder.decode(bytes);
+        let bytes = match &convertido {
+            Some(texto) => texto.as_bytes(),
+            None => bytes,
+        };
+
+        self.pending.extend_from_slice(bytes);
 
         let mut start = 0usize;
         for i in 0..self.pending.len() {
@@ -424,6 +467,15 @@ impl LogSet {
             .collect();
         names.dedup();
         names.join("+")
+    }
+
+    /// Codificación ya resuelta de la primera fuente (es la que se muestra en
+    /// la barra). Un fichero vacío no tiene ninguna: se anuncia UTF-8.
+    pub fn encoding_name(&self) -> String {
+        self.sources
+            .first()
+            .map(|source| source.table.encoding_name().to_string())
+            .unwrap_or_else(|| "utf8".to_string())
     }
 
     pub fn generation(&self) -> u32 {
