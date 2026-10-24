@@ -86,20 +86,27 @@ Peticiones del dueño del proyecto, en el orden en que conviene atacarlas.
         abajo debe poder seguir en vivo una vista combinada, hay que resolver
         antes el reordenado por instante con líneas entrando (ver «Vista
         combinada» en `README.md` y `SPEC.md`).
-      - Pendiente de decidir con el usuario: forma de la consulta (formulario de
-        condiciones frente a sintaxis de texto), si admite OR/NOT además de AND,
-        si el rango de fechas es absoluto o relativo, si la franja horaria se
-        aplica a cada día del rango, si el filtro combina con los niveles y el
-        texto de la barra o los sustituye, si el grid de abajo puede saltar a la
-        línea correspondiente del principal, y si en las pestañas combinadas se
-        puede filtrar por fuente.
+      - **Decidido con el usuario**: la consulta se edita en una **ventana con
+        formulario** (nada de sintaxis de texto, las fechas y horas se escriben
+        mal); admite **AND, OR y NOT**; el rango de fechas es **entre dos fechas
+        cualesquiera** y la franja horaria se aplica **a todos los días** de ese
+        rango; el filtro **sustituye** a los niveles y el texto de la barra —para
+        el grid de abajo, la barra sigue mandando en el principal—; y los filtros
+        **se guardan con nombre por fichero**, para poder cargarlos más adelante.
+      - Pendiente de decidir: forma exacta del formulario (grupos con paréntesis
+        o lista plana), si además de los filtros del fichero hay una biblioteca
+        común, dónde se guardan (localStorage o fichero exportable/importable), si
+        al reabrir el fichero se restaura el último filtro con el panel abierto, si
+        el panel se puede redimensionar, si el grid de abajo debe seguir en vivo en
+        pestañas combinadas y si en combinadas se puede filtrar por fuente.
 
 - [ ] **Persistencia de la configuración por fichero**: todo lo que se ajuste
       sobre un log se recuerda para la próxima vez. Ya se guardan parser, mapeo de
       columnas, codificación y reglas de color. Añadir: columnas visibles y sus
-      anchos, Delta Time, la consulta del filtro avanzado y si estaba abierto, y
-      decidir si el tail y el autoscroll pasan de ser preferencia global a ser
-      estado por fichero. Cuidado con recordar una consulta restrictiva: puede
+      anchos, Delta Time, y los filtros avanzados **con nombre**: el fichero
+      recuerda cuáles tiene, cuál estaba activo y si el panel estaba abierto.
+      También el tail y el autoscroll pasan a guardarse **por fichero** (hoy son
+      preferencia global). Cuidado con recordar una consulta restrictiva: puede
       parecer que al fichero le faltan líneas, así que hace falta un indicador
       visible y una forma clara de limpiarla.
 
