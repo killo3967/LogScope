@@ -203,3 +203,180 @@ fn el_filtro_funciona_en_la_vista_combinada() {
     }
     assert!(visibles.len() < set.len());
 }
+
+// ------------------------------------------------- seguir en vivo una vista
+
+/// Fuente escrita en UTC, para que el instante real coincida con los dígitos
+/// del fichero y las cuentas del test sean legibles.
+fn fuente_utc(nombre: &str, contenido: &str) -> Source {
+    let mut table = EntryTable::new(logscope_lib::parser::BasicParser::new());
+    table.set_zona(Some(0));
+    table.ingest_bytes(contenido.as_bytes());
+    Source {
+        name: nombre.to_string(),
+        table,
+    }
+}
+
+/// Mensajes de todas las filas, en el orden de la vista.
+fn mensajes_de(set: &LogSet) -> Vec<String> {
+    (0..set.len()).map(|index| mensaje(&set.row(index))).collect()
+}
+
+/// ¿El `order` sigue ordenado por instante no decreciente?
+fn orden_por_instante(set: &LogSet) -> bool {
+    (1..set.len()).all(|index| set.instant_at(index - 1) <= set.instant_at(index))
+}
+
+#[test]
+fn seguir_en_vivo_mantiene_el_orden_de_instante() {
+    let a = fuente_utc(
+        "a.log",
+        "2026-10-22 10:00:00 INFO a0\n2026-10-22 10:00:04 INFO a1\n",
+    );
+    let b = fuente_utc("b.log", "2026-10-22 10:00:02 INFO b0\n");
+    let mut set = LogSet::new(vec![a, b]);
+    assert_eq!(set.len(), 3);
+    let generacion = set.generation();
+
+    // Crece el primero de los ficheros: la línea nueva va al final.
+    set.sources[0]
+        .table
+        .ingest_bytes(b"2026-10-22 10:00:06 INFO a2\n");
+    assert_eq!(set.sync_merged(), Some(3));
+    assert_eq!(set.len(), 4, "la vista crece sin perder nada");
+    assert_ne!(
+        set.generation(),
+        generacion,
+        "la interfaz tiene que enterarse del cambio"
+    );
+    assert!(orden_por_instante(&set), "el orden sigue siendo por instante");
+    assert_eq!(mensajes_de(&set), vec!["a0", "b0", "a1", "a2"]);
+
+    // Sin nada nuevo no hay cambio ni aviso.
+    assert_eq!(set.sync_merged(), None);
+}
+
+#[test]
+fn una_linea_antigua_entra_en_medio_y_avisa_de_la_posicion() {
+    let a = fuente_utc(
+        "a.log",
+        "2026-10-22 10:00:00 INFO a0\n2026-10-22 10:00:08 INFO a1\n",
+    );
+    let b = fuente_utc("b.log", "2026-10-22 10:00:05 INFO b0\n");
+    let mut set = LogSet::new(vec![a, b]);
+    assert_eq!(mensajes_de(&set), vec!["a0", "b0", "a1"]);
+
+    // Llegan al segundo fichero dos líneas anteriores a su última fila.
+    set.sources[1]
+        .table
+        .ingest_bytes(b"2026-10-22 10:00:02 INFO b1\n2026-10-22 10:00:06 INFO b2\n");
+    assert_eq!(
+        set.sync_merged(),
+        Some(1),
+        "la posición mínima insertada es la de b1"
+    );
+    assert_eq!(mensajes_de(&set), vec!["a0", "b1", "b0", "b2", "a1"]);
+    assert!(orden_por_instante(&set));
+}
+
+#[test]
+fn un_empate_entra_despues_de_lo_que_ya_estaba() {
+    let a = fuente_utc(
+        "a.log",
+        "2026-10-22 10:00:00 INFO a0\n2026-10-22 10:00:05 INFO a1\n",
+    );
+    let b = fuente_utc("b.log", "2026-10-22 10:00:05 INFO b0\n");
+    let mut set = LogSet::new(vec![a, b]);
+    assert_eq!(mensajes_de(&set), vec!["a0", "b0", "a1"]);
+
+    // Dos líneas nuevas con el mismo instante que las que ya había.
+    set.sources[0]
+        .table
+        .ingest_bytes(b"2026-10-22 10:00:05 INFO a2\n");
+    set.sources[1]
+        .table
+        .ingest_bytes(b"2026-10-22 10:00:05 INFO b1\n");
+    assert_eq!(set.sync_merged(), Some(3));
+    assert_eq!(
+        mensajes_de(&set),
+        vec!["a0", "b0", "a1", "a2", "b1"],
+        "las nuevas van después de las existentes y entre ellas por fuente"
+    );
+}
+
+#[test]
+fn tras_reiniciar_una_fuente_el_orden_se_reconstruye() {
+    let a = fuente_utc(
+        "a.log",
+        "2026-10-22 10:00:00 INFO a0\n2026-10-22 10:00:09 INFO a1\n",
+    );
+    let b = fuente_utc("b.log", "2026-10-22 10:00:05 INFO b0\n");
+    let mut set = LogSet::new(vec![a, b]);
+    assert_eq!(set.len(), 3);
+
+    // Rotación del segundo fichero: su tabla se vacía y el orden se rehace.
+    set.reset_source(1);
+    assert_eq!(set.len(), 2, "solo quedan las filas de la fuente intacta");
+    assert!(orden_por_instante(&set));
+
+    // La fuente rotada empieza de nuevo con otro contenido.
+    set.sources[1]
+        .table
+        .ingest_bytes(b"2026-10-22 10:00:01 INFO nuevo\n");
+    assert_eq!(set.sync_merged(), Some(1));
+    assert_eq!(mensajes_de(&set), vec!["a0", "nuevo", "a1"]);
+
+    // La reconstrucción explícita deja la misma cuenta y el mismo orden.
+    set.rebuild_order();
+    assert_eq!(set.len(), 3);
+    assert!(orden_por_instante(&set));
+    assert_eq!(mensajes_de(&set), vec!["a0", "nuevo", "a1"]);
+}
+
+/// Instante (ms desde 1970) como línea de log, para generar volumen deprisa.
+fn linea_con_instante(ms: i64, nombre: &str) -> String {
+    let segundos = ms / 1000;
+    format!(
+        "2026-10-22 10:{:02}:{:02}.{:03} INFO {nombre}\n",
+        (segundos / 60) % 60,
+        segundos % 60,
+        ms % 1000
+    )
+}
+
+#[test]
+fn pocas_lineas_nuevas_en_un_conjunto_grande_cuestan_poco() {
+    // 100 000 entradas repartidas entre dos fuentes, con instantes alternos.
+    let mut texto_a = String::new();
+    let mut texto_b = String::new();
+    for paso in 0..50_000i64 {
+        texto_a.push_str(&linea_con_instante(paso * 4, "a"));
+        texto_b.push_str(&linea_con_instante(paso * 4 + 2, "b"));
+    }
+    let mut set = LogSet::new(vec![fuente_utc("a.log", &texto_a), fuente_utc("b.log", &texto_b)]);
+    assert_eq!(set.len(), 100_000);
+    assert!(orden_por_instante(&set));
+
+    // Diez líneas nuevas al final de cada fuente.
+    let mut nuevas_a = String::new();
+    let mut nuevas_b = String::new();
+    for paso in 0..5i64 {
+        nuevas_a.push_str(&linea_con_instante(200_000 + paso * 4, "a-nueva"));
+        nuevas_b.push_str(&linea_con_instante(200_002 + paso * 4, "b-nueva"));
+    }
+
+    let inicio = std::time::Instant::now();
+    set.sources[0].table.ingest_bytes(nuevas_a.as_bytes());
+    set.sources[1].table.ingest_bytes(nuevas_b.as_bytes());
+    assert_eq!(set.sync_merged(), Some(100_000));
+    let transcurrido = inicio.elapsed();
+
+    assert_eq!(set.len(), 100_010);
+    assert!(orden_por_instante(&set), "el orden se mantiene");
+    assert!(
+        transcurrido < std::time::Duration::from_millis(500),
+        "diez líneas nuevas en 100 000 no deben reordenar el conjunto: {transcurrido:?}"
+    );
+    println!("sync_merged con 100 000 filas y 10 nuevas: {transcurrido:?}");
+}

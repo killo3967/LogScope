@@ -125,20 +125,6 @@ persistencia va al final, cuando ya exista todo lo que hay que recordar.
         - Al arrancar, las ventanas de filtro se reabren **o no, según un ajuste**.
         - Si se cierra la pestaña dueña, la ventana **avisa antes de cerrarse**.
 
-- [ ] **Tail en vivo en vistas combinadas**. Hoy `start_tail` se rechaza con
-      `tail_merged` (`lib.rs`) y la interfaz ni lo pide cuando la vista está
-      combinada (`App.tsx`: `settings.startWithTail && !result.merged`). El orden
-      de una vista combinada es `Vec<(ts, source_idx, entry_idx)>` ordenado por
-      instante, así que cada línea nueva hay que insertarla en su sitio. Hace
-      falta:
-      - insertar por instante con búsqueda binaria sobre `order`, manteniendo la
-        ronda entre fuentes cuando varias traen el mismo instante;
-      - avisar a la interfaz sin romper el grid virtualizado: hoy
-        `sync_single_source` solo empuja índices al final, y con inserciones en
-        medio hay que invalidar la caché de páginas y recolocar el scroll y la
-        fila marcada;
-      - pruebas de fusión con líneas entrando en varias fuentes a la vez.
-      Lo necesitan tanto el grid principal como el panel de filtro avanzado.
 - [ ] **Columna Delta Time**. Desde el menú contextual de la cabecera de `Time`,
       añadir una columna con el tiempo transcurrido entre líneas. En el **grid
       principal el delta se calcula sobre todas las filas del fichero**, no solo
@@ -336,8 +322,8 @@ seis idiomas (`70b36cf`). Queda:
 4. **Filtro avanzado**, por partes: (a) núcleo con `Filters` ampliado y pruebas;
    (b) formulario y biblioteca de filtros; (c) grid inferior independiente con su
    Delta Time; (d) pregunta al abrir y persistencia; (e) ventanas propias.
-5. **Tail en combinadas** (el trabajo delicado del núcleo): insertar por
-   instante, invalidar caché y pruebas de fusión.
+5. ~~**Tail en combinadas**~~ — hecho: inserción por instante en el núcleo y
+   refresco de la rejilla con descarte de selección.
 6. **Delta Time del principal, atajos con editor y persistencia por fichero**.
 7. **Publicación**: NSIS, documentación en inglés, ficha y capturas. La licencia
    ya está hecha.

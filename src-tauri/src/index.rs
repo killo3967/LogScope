@@ -494,6 +494,10 @@ pub struct LogSet {
     pub sources: Vec<Source>,
     /// (instante, índice de fuente, índice de entrada)
     order: Vec<(i64, u32, u32)>,
+    /// Cuántas entradas de cada fuente están ya dentro de `order`. Las nuevas
+    /// son `synced[fuente]..tabla.len()`, que es lo que mira [`LogSet::sync_merged`]
+    /// para no recorrer lo ya ordenado.
+    synced: Vec<usize>,
     merged: bool,
     cache: Mutex<Option<(Filters, Arc<Vec<u32>>)>>,
     /// Cambia cada vez que se ingieren entradas nuevas por el tail.
@@ -503,44 +507,63 @@ pub struct LogSet {
 impl LogSet {
     pub fn new(sources: Vec<Source>) -> LogSet {
         let merged = sources.len() > 1;
-        let mut order: Vec<(i64, u32, u32)> = Vec::new();
-
-        if merged {
-            for (source_index, source) in sources.iter().enumerate() {
-                for entry in 0..source.table.len() {
-                    order.push((
-                        source.table.instant_at(entry),
-                        source_index as u32,
-                        entry as u32,
-                    ));
-                }
-            }
-            // Los sin instante, al final y en el orden en que se leyeron.
-            // A igualdad de instante manda el número de entrada y después la
-            // fuente: así las líneas de ficheros distintos se entremezclan en
-            // ronda (a0, b0, a1, b1…) en vez de agruparse por fichero.
-            order.sort_by(|a, b| {
-                let a_sin = a.0 == NO_TS;
-                let b_sin = b.0 == NO_TS;
-                a_sin
-                    .cmp(&b_sin)
-                    .then(a.0.cmp(&b.0))
-                    .then(a.2.cmp(&b.2))
-                    .then(a.1.cmp(&b.1))
-            });
-        } else {
-            for entry in 0..sources[0].table.len() {
-                order.push((0, 0, entry as u32));
-            }
-        }
+        let order = Self::build_order(&sources, merged);
+        let synced = sources
+            .iter()
+            .map(|source| source.table.len())
+            .collect();
 
         LogSet {
             sources,
             order,
+            synced,
             merged,
             cache: Mutex::new(None),
             generation: AtomicU32::new(1),
         }
+    }
+
+    /// Orden completo de la vista, de cero. Con varias fuentes se ordena por
+    /// instante real; con una sola se respeta el orden de lectura.
+    fn build_order(sources: &[Source], merged: bool) -> Vec<(i64, u32, u32)> {
+        if !merged {
+            let entries = sources.first().map(|source| source.table.len()).unwrap_or(0);
+            return (0..entries).map(|entry| (0, 0, entry as u32)).collect();
+        }
+
+        let mut order: Vec<(i64, u32, u32)> = Vec::new();
+        for (source_index, source) in sources.iter().enumerate() {
+            for entry in 0..source.table.len() {
+                order.push((
+                    source.table.instant_at(entry),
+                    source_index as u32,
+                    entry as u32,
+                ));
+            }
+        }
+        // Los sin instante, al final y en el orden en que se leyeron.
+        // A igualdad de instante manda el número de entrada y después la
+        // fuente: así las líneas de ficheros distintos se entremezclan en
+        // ronda (a0, b0, a1, b1…) en vez de agruparse por fichero.
+        order.sort_by(|a, b| {
+            let a_sin = a.0 == NO_TS;
+            let b_sin = b.0 == NO_TS;
+            a_sin
+                .cmp(&b_sin)
+                .then(a.0.cmp(&b.0))
+                .then(a.2.cmp(&b.2))
+                .then(a.1.cmp(&b.1))
+        });
+        order
+    }
+
+    /// Posición donde insertar una entrada de instante `instante`: **después**
+    /// de todas las que tienen ese mismo instante (cota superior) y antes de
+    /// las que no tienen hora, que van al final.
+    fn position_for_instant(&self, instant: i64) -> usize {
+        let sin_instante = instant == NO_TS;
+        self.order
+            .partition_point(|&(otro, _, _)| (otro == NO_TS, otro) <= (sin_instante, instant))
     }
 
     pub fn len(&self) -> usize {
@@ -612,11 +635,103 @@ impl LogSet {
         if self.merged {
             return;
         }
-        let entries = self.sources[0].table.len();
+        let Some(source) = self.sources.first() else {
+            return;
+        };
+        let entries = source.table.len();
         for entry in self.order.len()..entries {
             self.order.push((0, 0, entry as u32));
         }
+        if let Some(synced) = self.synced.first_mut() {
+            *synced = entries;
+        }
         self.invalidate();
+    }
+
+    /// Incorpora al `order` las entradas nuevas de **todas** las fuentes de una
+    /// vista combinada, cada una en su sitio por instante real, con búsqueda
+    /// binaria. Devuelve la **posición mínima** en la que se insertó algo (la
+    /// interfaz la necesita para saber si la selección sigue siendo válida), o
+    /// `None` si no había nada nuevo.
+    ///
+    /// **Empates**: una línea nueva con el mismo instante que otras se coloca
+    /// *después* de las que ya estaban (cota superior) y, entre las nuevas de
+    /// ese instante, por `(fuente, entrada)`. La ronda perfecta entre fuentes
+    /// —`a0, b0, a1, b1`— solo se garantiza al construir la vista
+    /// ([`LogSet::new`]) o al reconstruirla ([`LogSet::rebuild_order`]); lo que
+    /// entra en vivo se añade al final de su grupo de instante.
+    ///
+    /// El coste depende solo de lo nuevo: nada de reordenar el `order` entero
+    /// en cada línea. Si alguna tabla se reinició sin reconstruir el orden, se
+    /// reconstruye aquí (es el único caso caro, y solo pasa al rotar).
+    pub fn sync_merged(&mut self) -> Option<usize> {
+        if !self.merged {
+            return None;
+        }
+
+        // Una tabla que encogió (reset sin `rebuild_order`) deja índices
+        // colgando: no hay forma barata de saber cuáles sobran.
+        let encogio = self
+            .sources
+            .iter()
+            .enumerate()
+            .any(|(index, source)| source.table.len() < self.synced[index]);
+        if encogio {
+            self.rebuild_order();
+            return Some(0);
+        }
+
+        // Se recogen primero las nuevas, ya en orden `(fuente, entrada)`, para
+        // no tener el conjunto prestado a la vez en lectura y escritura.
+        let mut nuevas: Vec<(i64, u32, u32)> = Vec::new();
+        for (source_index, source) in self.sources.iter().enumerate() {
+            for entry in self.synced[source_index]..source.table.len() {
+                nuevas.push((
+                    source.table.instant_at(entry),
+                    source_index as u32,
+                    entry as u32,
+                ));
+            }
+        }
+        if nuevas.is_empty() {
+            return None;
+        }
+
+        let mut minimo: Option<usize> = None;
+        for (instant, source_index, entry) in nuevas {
+            let position = self.position_for_instant(instant);
+            self.order.insert(position, (instant, source_index, entry));
+            minimo = Some(minimo.map_or(position, |actual| actual.min(position)));
+        }
+        for (index, source) in self.sources.iter().enumerate() {
+            self.synced[index] = source.table.len();
+        }
+        self.invalidate();
+        minimo
+    }
+
+    /// Reconstruye el `order` desde cero con el mismo criterio que
+    /// [`LogSet::new`]. **Es caro** (ordena todas las entradas de todas las
+    /// fuentes), así que solo se usa cuando el orden deja de ser válido: al
+    /// rotar o truncar una fuente de la vista combinada.
+    pub fn rebuild_order(&mut self) {
+        self.order = Self::build_order(&self.sources, self.merged);
+        self.synced = self
+            .sources
+            .iter()
+            .map(|source| source.table.len())
+            .collect();
+        self.invalidate();
+    }
+
+    /// Reinicia la fuente `index` (rotación o truncado del fichero) y
+    /// reconstruye el orden, que deja de ser válido en cuanto se vacía una
+    /// tabla.
+    pub fn reset_source(&mut self, index: usize) {
+        if let Some(source) = self.sources.get_mut(index) {
+            source.table.reset();
+        }
+        self.rebuild_order();
     }
 
     /// Tras un truncado o una rotación del fichero seguido.

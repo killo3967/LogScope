@@ -230,8 +230,26 @@ export function LogGrid({
   useEffect(() => {
     if (!sessionId || generation === 0) return;
     const lastPage = Math.floor(Math.max(total - 1, 0) / PAGE);
-    cache.current.delete(lastPage);
+
+    if (merged) {
+      // En una vista combinada las líneas nuevas entran **en medio**: los
+      // índices visibles se desplazan y la caché de páginas entera deja de
+      // valer. Se tira, se suelta la selección (apuntaría a otras filas) y se
+      // vuelve a pedir lo que se está viendo.
+      cache.current.clear();
+      inflight.current.clear();
+      setSeleccion(new Set());
+      setAncla(null);
+      const items = virtualizer.getVirtualItems();
+      const desde = items.length > 0 ? Math.floor(items[0].index / PAGE) : lastPage;
+      const hasta =
+        items.length > 0 ? Math.floor(items[items.length - 1].index / PAGE) : lastPage;
+      for (let page = desde; page <= hasta; page += 1) void loadPage(page);
+    } else {
+      cache.current.delete(lastPage);
+    }
     void loadPage(lastPage);
+    bump();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [generation]);
 

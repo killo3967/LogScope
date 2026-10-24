@@ -1,4 +1,5 @@
 use std::io::{Read, Seek, SeekFrom};
+use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::thread;
@@ -43,83 +44,168 @@ pub fn is_truncated(file_len: u64, pos: u64) -> bool {
     file_len < pos
 }
 
-/// Sigue el fichero en un hilo propio: sondeo del tamaño, detección de
-/// truncado y de rotación, e ingesta incremental.
+/// Seguimiento de una fuente: su fichero abierto, la posición de lectura y la
+/// identidad con la que se detecta la rotación. Una vista combinada lleva uno
+/// por fichero.
+struct Seguimiento {
+    path: PathBuf,
+    file: std::fs::File,
+    pos: u64,
+    identity: Option<std::time::SystemTime>,
+}
+
+impl Seguimiento {
+    /// Abre el fichero y arranca desde lo ya ingerido al abrir la sesión.
+    fn nuevo(path: PathBuf, consumido: u64) -> std::io::Result<Seguimiento> {
+        let file = std::fs::File::open(&path)?;
+        Ok(Seguimiento {
+            identity: file_identity(&path),
+            path,
+            file,
+            pos: consumido,
+        })
+    }
+
+    /// Detecta rotación (otro fichero en la misma ruta) y truncado, y deja el
+    /// fichero listo para leer desde el principio. Devuelve `true` si la tabla
+    /// de esa fuente hay que reiniciarla.
+    fn renovar(&mut self) -> bool {
+        let mut reiniciar = false;
+
+        let current_identity = file_identity(&self.path);
+        if current_identity != self.identity {
+            self.identity = current_identity;
+            if let Ok(file) = std::fs::File::open(&self.path) {
+                self.file = file;
+            }
+            self.pos = 0;
+            reiniciar = true;
+        }
+
+        if let Ok(meta) = std::fs::metadata(&self.path) {
+            if is_truncated(meta.len(), self.pos) {
+                self.pos = 0;
+                if self.file.seek(SeekFrom::Start(0)).is_err() {
+                    if let Ok(file) = std::fs::File::open(&self.path) {
+                        self.file = file;
+                    }
+                }
+                reiniciar = true;
+            }
+        }
+
+        reiniciar
+    }
+}
+
+/// Sigue en un hilo propio **todas** las fuentes de la sesión: sondeo del
+/// tamaño de cada fichero, detección de truncado y de rotación por fuente e
+/// ingesta incremental.
 ///
-/// Solo se usa con sesiones de una fuente: en una vista combinada el orden
-/// tendría que recalcularse en cada línea.
+/// Con **una sola fuente** se comporta como siempre: `sync_single_source`, que
+/// empuja índices al final porque el orden de lectura ya es el de instante.
+/// Con **varias**, cada vuelta lee lo nuevo de todas y llama una sola vez a
+/// `LogSet::sync_merged`, que intercala por instante real; al rotar o truncar
+/// una fuente se reinicia su tabla y se reconstruye el orden.
 pub fn spawn(app: AppHandle, session: Arc<Session>) {
     thread::spawn(move || {
-        let path = session.path.clone();
-
-        let mut file = match std::fs::File::open(&path) {
-            Ok(f) => f,
-            Err(_) => {
-                session.tail_running.store(false, Ordering::SeqCst);
-                return;
-            }
+        let merged = match session.set.lock() {
+            Ok(set) => set.is_merged(),
+            Err(poisoned) => poisoned.into_inner().is_merged(),
         };
 
-        let mut pos = {
-            let set = match session.set.lock() {
-                Ok(set) => set,
-                Err(poisoned) => poisoned.into_inner(),
-            };
-            set.sources
-                .first()
-                .map(|source| source.table.consumed())
-                .unwrap_or(0)
-        };
-        let mut identity = file_identity(&path);
-        let mut buf = vec![0u8; CHUNK];
-
-        while !session.tail_stop.load(Ordering::SeqCst) {
-            // Rotación: el fichero ha sido reemplazado por otro.
-            let current_identity = file_identity(&path);
-            if current_identity != identity {
-                identity = current_identity;
-                if let Ok(f) = std::fs::File::open(&path) {
-                    file = f;
-                }
-                pos = 0;
-                if let Ok(mut set) = session.set.lock() {
-                    set.reset_single_source();
-                }
-            }
-
-            // Truncado: el fichero es más corto que lo ya consumido.
-            if let Ok(meta) = std::fs::metadata(&path) {
-                if is_truncated(meta.len(), pos) {
-                    pos = 0;
-                    if file.seek(SeekFrom::Start(0)).is_err() {
-                        if let Ok(f) = std::fs::File::open(&path) {
-                            file = f;
-                        }
-                    }
-                    if let Ok(mut set) = session.set.lock() {
-                        set.reset_single_source();
-                    }
-                }
-            }
-
-            let appended = {
-                let mut set = match session.set.lock() {
+        let mut seguimientos: Vec<Seguimiento> = Vec::with_capacity(session.paths.len());
+        for (index, path) in session.paths.iter().enumerate() {
+            let consumido = {
+                let set = match session.set.lock() {
                     Ok(set) => set,
                     Err(poisoned) => poisoned.into_inner(),
                 };
-                match set.sources.first_mut() {
-                    Some(source) => pump(&mut file, &mut source.table, &mut pos, &mut buf),
-                    None => 0,
-                }
+                set.sources
+                    .get(index)
+                    .map(|source| source.table.consumed())
+                    .unwrap_or(0)
             };
+            match Seguimiento::nuevo(path.clone(), consumido) {
+                Ok(seguimiento) => seguimientos.push(seguimiento),
+                Err(_) => {
+                    // Sin poder abrir una fuente no se puede seguir la vista.
+                    session.tail_running.store(false, Ordering::SeqCst);
+                    return;
+                }
+            }
+        }
+
+        if seguimientos.is_empty() {
+            session.tail_running.store(false, Ordering::SeqCst);
+            return;
+        }
+
+        let mut buf = vec![0u8; CHUNK];
+
+        while !session.tail_stop.load(Ordering::SeqCst) {
+            let mut appended = 0u64;
+
+            for (index, seguimiento) in seguimientos.iter_mut().enumerate() {
+                if seguimiento.renovar() {
+                    if let Ok(mut set) = session.set.lock() {
+                        if merged {
+                            set.reset_source(index);
+                        } else {
+                            set.reset_single_source();
+                        }
+                    }
+                }
+
+                let leidos = {
+                    let mut set = match session.set.lock() {
+                        Ok(set) => set,
+                        Err(poisoned) => poisoned.into_inner(),
+                    };
+                    match set.sources.get_mut(index) {
+                        Some(source) => pump(
+                            &mut seguimiento.file,
+                            &mut source.table,
+                            &mut seguimiento.pos,
+                            &mut buf,
+                        ),
+                        None => 0,
+                    }
+                };
+                appended += leidos;
+            }
 
             if appended > 0 {
-                if let Ok(mut set) = session.set.lock() {
-                    set.sync_single_source();
-                }
+                // Una sola sincronización por vuelta, no una por fuente: con
+                // varias fuentes el orden se toca una vez. En la vista combinada
+                // se informa además de la primera fila insertada, para que la
+                // interfaz sepa si tiene que descartar la selección.
+                let insertada = match session.set.lock() {
+                    Ok(mut set) => {
+                        if merged {
+                            set.sync_merged()
+                        } else {
+                            set.sync_single_source();
+                            None
+                        }
+                    }
+                    Err(poisoned) => {
+                        let mut set = poisoned.into_inner();
+                        if merged {
+                            set.sync_merged()
+                        } else {
+                            set.sync_single_source();
+                            None
+                        }
+                    }
+                };
                 let _ = app.emit(
                     "log://appended",
-                    serde_json::json!({ "sessionId": session.id, "bytes": appended }),
+                    serde_json::json!({
+                        "sessionId": session.id,
+                        "bytes": appended,
+                        "insertAt": insertada,
+                    }),
                 );
             }
 

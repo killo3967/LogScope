@@ -155,16 +155,19 @@ entradas se ordenan por instante:
   bloques. Si una fuente se queda sin líneas en ese instante, la otra continúa.
 - Entradas sin instante: al final, en el orden en que se leyeron.
 
-La columna `Source` indica el fichero de cada fila. El tail en vivo se
-desactiva en vistas combinadas: mantener el orden con líneas entrando en varios
-ficheros exigiría reordenar en cada línea.
+La columna `Source` indica el fichero de cada fila. El tail en vivo **también
+funciona aquí**: cada fichero se vigila por separado y las líneas nuevas se
+insertan en su sitio por instante. Como eso desplaza los números de fila, la
+selección se descarta cuando entran líneas, y a igual instante las nuevas van
+detrás de las que ya estaban.
 
 ## Tail en vivo
 
-**Tail en vivo** sigue el fichero mientras crece. Con **Autoscroll** marcado, la
-vista baja sola con cada línea nueva; si te desplazas hacia arriba, el
-autoscroll se desmarca para no pelearse contigo, y un desplazamiento del propio
-tail no lo desactiva.
+**Tail en vivo** sigue el fichero mientras crece, y en las vistas combinadas
+sigue **todos** los ficheros a la vez. Con **Autoscroll** marcado, la vista baja
+sola con cada línea nueva; si te desplazas hacia arriba, el autoscroll se
+desmarca para no pelearse contigo, y un desplazamiento del propio tail no lo
+desactiva.
 
 ## Ajustes
 

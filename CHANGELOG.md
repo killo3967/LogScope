@@ -18,6 +18,11 @@ Mientras la versión mayor sea `0`, la parte menor puede romper compatibilidad:
 
 ### Añadido
 
+- **Tail en vivo en vistas combinadas**: se vigila cada fichero por separado y las
+  líneas nuevas se insertan en su sitio por instante, con coste proporcional a lo
+  que entra. Al entrar líneas la selección se descarta, porque los números de
+  fila se desplazan, y a igual instante las nuevas quedan detrás de las que ya
+  estaban.
 - **Filtro avanzado**: ventana con grupos de condiciones combinables con **Y** u
   **O** (sobre el texto de la entrada, el nivel o el fichero de origen; contiene,
   igual, empieza por, termina por o expresión regular, cada una con **NO**), más

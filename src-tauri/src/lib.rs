@@ -61,18 +61,23 @@ pub(crate) fn error_io(message: impl ToString) -> String {
 
 pub struct Session {
     pub id: String,
-    /// Primer fichero: es el que sigue el tail en vivo.
+    /// Primer fichero de la sesión: junto a él se escribe la exportación.
     pub path: PathBuf,
+    /// Todas las fuentes de la sesión, en el mismo orden que
+    /// `LogSet::sources`: es lo que sigue el tail en vivo.
+    pub paths: Vec<PathBuf>,
     pub set: Arc<Mutex<LogSet>>,
     pub tail_stop: Arc<AtomicBool>,
     pub tail_running: Arc<AtomicBool>,
 }
 
 impl Session {
-    fn new(id: String, path: PathBuf, set: LogSet) -> Arc<Session> {
+    fn new(id: String, paths: Vec<PathBuf>, set: LogSet) -> Arc<Session> {
+        let path = paths.first().cloned().unwrap_or_default();
         Arc::new(Session {
             id,
             path,
+            paths,
             set: Arc::new(Mutex::new(set)),
             tail_stop: Arc::new(AtomicBool::new(false)),
             tail_running: Arc::new(AtomicBool::new(false)),
@@ -419,7 +424,7 @@ fn open_files(
         zona_horaria: options.zona_horaria,
     };
 
-    let session = Session::new(id.clone(), files[0].clone(), set);
+    let session = Session::new(id.clone(), files, set);
     let mut sessions = match state.sessions.lock() {
         Ok(s) => s,
         Err(p) => p.into_inner(),
@@ -509,8 +514,10 @@ fn export_selection(
 #[tauri::command]
 fn start_tail(app: AppHandle, state: State<'_, AppState>, session_id: String) -> Result<(), String> {
     let session = get_session(&state, &session_id)?;
-    if lock_set(&session).is_merged() {
-        return Err(error_json("tail_merged", &[]));
+    // Sin fuentes no hay nada que seguir: una sesión combinada vacía no arranca
+    // el hilo, pero tampoco es un error para la interfaz.
+    if session.paths.is_empty() {
+        return Ok(());
     }
     if session
         .tail_running

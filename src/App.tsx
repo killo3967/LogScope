@@ -203,10 +203,9 @@ export default function App() {
           mappingToUse ??
           (result.sample_lines.length > 1 ? result.proposed_mapping : null);
 
-        // Ajuste "iniciar con tail": solo vale con una fuente, igual que el
-        // boton de la barra. Si falla, la sesion se abre sin tail.
+        // Ajuste "iniciar con tail". Si falla, la sesión se abre sin tail.
         let tailing = false;
-        if (settings.startWithTail && !result.merged) {
+        if (settings.startWithTail) {
           try {
             await invoke("start_tail", { sessionId: result.session_id });
             tailing = true;
@@ -342,10 +341,6 @@ export default function App() {
 
   const handleToggleTail = useCallback(async () => {
     if (!active) return;
-    if (active.session.merged) {
-      setError(t("app.tailMerged"));
-      return;
-    }
     try {
       if (active.tailing) {
         await invoke("stop_tail", { sessionId: active.id });
@@ -650,7 +645,7 @@ export default function App() {
     hayUltimo: settings.lastOpen !== null,
     hayPestana: !!active,
     tailing: active?.tailing ?? false,
-    tailEnabled: !!active && !active.session.merged,
+    tailEnabled: !!active,
     autoScroll,
     onAbrir: () => setBrowserOpen(true),
     onReabrirUltimo: () => {
@@ -691,7 +686,7 @@ export default function App() {
         onFiltroAvanzado={() => setFiltroOpen(true)}
         onQuitarFiltroAvanzado={quitarFiltroAvanzado}
         tailing={active?.tailing ?? false}
-        tailEnabled={!!active && !active.session.merged}
+        tailEnabled={!!active}
         onToggleTail={handleToggleTail}
         autoScroll={autoScroll}
         onAutoScrollChange={setAutoScroll}

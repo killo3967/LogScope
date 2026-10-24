@@ -126,6 +126,13 @@ Hilo propio por sesión, sondeo cada 250 ms:
 4. Si cambia la identidad del fichero → rotación: se reinicia el índice.
 5. Emite `log://appended` con el número de bytes nuevos.
 
+En una vista combinada se vigila **cada fuente** por separado y las entradas
+nuevas se insertan en el orden por instante con búsqueda binaria, así que el
+coste es proporcional a lo que entra, no al tamaño del fichero. A igual instante,
+las nuevas van después de las que ya estaban; la ronda perfecta entre fuentes
+solo se garantiza al construir la vista. Al rotar o truncar una fuente hay que
+reconstruir el orden completo, que es el caso caro y excepcional.
+
 `ReadDirectoryChangesW` por `notify` es la mejora prevista: elimina el sondeo,
 no el algoritmo.
 
