@@ -11,6 +11,10 @@ Mientras la versión mayor sea `0`, la parte menor puede romper compatibilidad:
 
 ### Añadido
 
+- **Selección múltiple de líneas** en el grid (Mayús+clic para un rango, Ctrl+clic
+  para sumar o quitar) y **copia al portapapeles** con o sin número de línea,
+  desde el menú contextual de la selección o con Ctrl+C. La copia pide al núcleo
+  las filas que no estén cargadas, así que no se limita a lo que hay en pantalla.
 - La interfaz está **traducida a seis idiomas** —castellano, inglés, francés,
   italiano, alemán y portugués— con un selector en **Ajustes → Idioma**. El
   idioma se guarda con el resto de preferencias y, la primera vez, se toma del

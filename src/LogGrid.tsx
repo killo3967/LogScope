@@ -1,13 +1,23 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { useVirtualizer } from "@tanstack/react-virtual";
 
 import type { Filters, HighlightRule, PageResult, Row } from "./types";
 import { COLUMN_WIDTHS, DEFAULT_COLUMN_WIDTH, formatClock, formatDate } from "./types";
+import { MenuFilas } from "./MenuFilas";
+import { mensajeDeError } from "./errores";
 import { t } from "./textos";
 
 const PAGE = 200;
 const ROW_HEIGHT = 22;
+// Al copiar, las filas que no están en memoria se piden al núcleo en tramos de
+// este tamaño: una petición por línea sería lentísima y una sola por toda la
+// selección, imposible (no cabe entera en memoria).
+const TRAMO_COPIA = 1000;
+// Tope de seguridad: por encima de esto el portapapeles no es el sitio y se
+// avisa en vez de intentarlo.
+const MAX_FILAS_COPIA = 50_000;
 const MIN_WIDTH = 48;
 // Ancho fijo de la columna de numeración: no se guarda en localStorage ni se
 // arrastra, para no mezclarla con los anchos de las columnas de datos.
@@ -23,6 +33,7 @@ interface Props {
   autoScroll: boolean;
   onAutoScrollChange: (value: boolean) => void;
   onSelectionMenu: (menu: { text: string; x: number; y: number } | null) => void;
+  onAviso: (texto: string) => void;
   rules: HighlightRule[];
   widths: Record<string, number>;
   onWidthChange: (column: string, width: number) => void;
@@ -44,6 +55,7 @@ export function LogGrid({
   autoScroll,
   onAutoScrollChange,
   onSelectionMenu,
+  onAviso,
   rules,
   widths,
   onWidthChange,
@@ -56,7 +68,13 @@ export function LogGrid({
   const cache = useRef(new Map<number, Row[]>());
   const inflight = useRef(new Set<number>());
   const [total, setTotal] = useState(0);
-  const [selected, setSelected] = useState<number | null>(null);
+  // Selección de filas por índice visible (posición dentro del resultado ya
+  // filtrado, que es sobre lo que pagina `read_page`). El ancla es el extremo
+  // fijo del rango: Mayús+clic selecciona desde ahí hasta la fila pulsada.
+  const [ancla, setAncla] = useState<number | null>(null);
+  const [seleccion, setSeleccion] = useState<Set<number>>(() => new Set());
+  const [menuFilas, setMenuFilas] = useState<{ x: number; y: number } | null>(null);
+  const [copiando, setCopiando] = useState(false);
   const [, bump] = useReducer((x: number) => x + 1, 0);
 
   const columns = useMemo(
@@ -158,9 +176,11 @@ export function LogGrid({
     cache.current.clear();
     inflight.current.clear();
     setTotal(0);
-    // La marca de fila va por índice: al cambiar de sesión o de filtro deja de
-    // apuntar a la misma entrada, así que se descarta.
-    setSelected(null);
+    // La selección va por índice: al cambiar de sesión o de filtro los índices
+    // dejan de apuntar a las mismas entradas, así que se descarta entera.
+    setAncla(null);
+    setSeleccion(new Set());
+    setMenuFilas(null);
     onTotal(0);
     parentRef.current?.scrollTo({ top: 0 });
   }, [sessionId, filterKey, onTotal]);
@@ -231,22 +251,162 @@ export function LogGrid({
     if (gap > ROW_HEIGHT * 2) onAutoScrollChange(false);
   }, [autoScroll, onAutoScrollChange]);
 
-  // Solo se intercepta el clic derecho si hay texto marcado: sin selección se
-  // deja pasar el menú nativo de WebView2, que es el de siempre.
+  // Clic normal: una fila. Mayús+clic: rango desde el ancla. Ctrl+clic: suma o
+  // resta esa fila y mueve el ancla.
+  const handleRowClick = useCallback(
+    (index: number, event: React.MouseEvent) => {
+      if (event.shiftKey && ancla !== null) {
+        // Mayús+clic no debe dejar viva la marca de texto anterior (el
+        // `preventDefault` del mousedown impide que el navegador la limpie): el
+        // menú contextual y Ctrl+C tienen que hablar de las filas.
+        window.getSelection()?.removeAllRanges();
+        const desde = Math.min(ancla, index);
+        const hasta = Math.max(ancla, index);
+        const rango = new Set<number>();
+        for (let fila = desde; fila <= hasta; fila += 1) rango.add(fila);
+        setSeleccion(rango);
+        return;
+      }
+      if (event.ctrlKey || event.metaKey) {
+        setSeleccion((previous) => {
+          const siguiente = new Set(previous);
+          if (siguiente.has(index)) siguiente.delete(index);
+          else siguiente.add(index);
+          return siguiente;
+        });
+        setAncla(index);
+        return;
+      }
+      setSeleccion(new Set([index]));
+      setAncla(index);
+    },
+    [ancla],
+  );
+
+  /// Filas de los índices pedidos: primero la caché y, para lo que falte,
+  /// peticiones al núcleo de `TRAMO_COPIA` filas, de menor a mayor. Así se
+  /// copia lo seleccionado aunque no esté cargado en pantalla.
+  const recogerFilas = useCallback(
+    async (indices: number[]): Promise<Row[]> => {
+      if (!sessionId) return [];
+      const encontradas = new Map<number, Row>();
+      const pendientes: number[] = [];
+      for (const index of indices) {
+        const row = cache.current.get(Math.floor(index / PAGE))?.[index % PAGE];
+        if (row) encontradas.set(index, row);
+        else pendientes.push(index);
+      }
+
+      let cursor = 0;
+      while (cursor < pendientes.length) {
+        const result = await invoke<PageResult>("read_page", {
+          sessionId,
+          start: pendientes[cursor],
+          count: TRAMO_COPIA,
+          filters,
+        });
+        // `Row.index` es la entrada real, no la posición filtrada: el índice
+        // visible de cada fila es la posición dentro de `rows`.
+        result.rows.forEach((row, offset) => encontradas.set(result.start + offset, row));
+        const ultimo = result.start + result.rows.length - 1;
+        let siguiente = cursor;
+        while (siguiente < pendientes.length && pendientes[siguiente] <= ultimo) siguiente += 1;
+        // Si el tramo vuelve vacío (final del fichero) hay que avanzar igual.
+        cursor = siguiente > cursor ? siguiente : cursor + 1;
+      }
+
+      return indices
+        .map((index) => encontradas.get(index))
+        .filter((row): row is Row => row !== undefined);
+    },
+    [sessionId, filters],
+  );
+
+  const copiarTexto = useCallback(async (texto: string) => {
+    try {
+      await navigator.clipboard.writeText(texto);
+    } catch {
+      // Sin permiso de portapapeles se recurre al comando clásico. La selección
+      // de filas no es una selección del DOM, así que el texto se pone en un
+      // área temporal y se selecciona antes de copiar.
+      const area = document.createElement("textarea");
+      area.value = texto;
+      area.style.position = "fixed";
+      area.style.opacity = "0";
+      document.body.appendChild(area);
+      area.select();
+      document.execCommand("copy");
+      area.remove();
+    }
+  }, []);
+
+  const copiarSeleccion = useCallback(
+    async (conNumeros: boolean) => {
+      if (!sessionId || seleccion.size === 0 || copiando) return;
+      const indices = Array.from(seleccion).sort((a, b) => a - b);
+      if (indices.length > MAX_FILAS_COPIA) {
+        setMenuFilas(null);
+        onAviso(t("sel.demasiadasFilas", { n: indices.length }));
+        return;
+      }
+      setCopiando(true);
+      try {
+        const filas = await recogerFilas(indices);
+        await copiarTexto(
+          filas.map((row) => (conNumeros ? `${row.line_no}: ${row.raw}` : row.raw)).join("\n"),
+        );
+        setMenuFilas(null);
+      } catch (cause) {
+        onAviso(mensajeDeError(String(cause)));
+      } finally {
+        setCopiando(false);
+      }
+    },
+    [sessionId, seleccion, copiando, recogerFilas, copiarTexto, onAviso],
+  );
+
+  // Ctrl+C: el estándar del portapapeles para las filas marcadas. No se pisa
+  // cuando el foco está en un campo de texto ni cuando hay texto marcado con el
+  // ratón, que es lo que el usuario quiere copiar en ese caso.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "c") return;
+      if (event.shiftKey || event.altKey) return;
+      if (seleccion.size === 0) return;
+      const target = event.target as HTMLElement | null;
+      const etiqueta = target?.tagName?.toLowerCase() ?? "";
+      if (etiqueta === "input" || etiqueta === "textarea" || etiqueta === "select") return;
+      if (target?.isContentEditable) return;
+      if ((window.getSelection()?.toString() ?? "") !== "") return;
+      event.preventDefault();
+      void copiarSeleccion(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [seleccion, copiarSeleccion]);
+
+  // El clic derecho abre el menú de texto si hay texto marcado y, si no, el de
+  // filas cuando hay filas seleccionadas. Sin nada marcado se deja pasar el
+  // menú nativo de WebView2, que es el de siempre.
   const handleContextMenu = useCallback(
     (event: React.MouseEvent) => {
-      const seleccion = window.getSelection()?.toString().trim() ?? "";
-      if (seleccion === "") return;
+      const texto = window.getSelection()?.toString().trim() ?? "";
+      if (texto !== "") {
+        event.preventDefault();
+        // Una selección de varias filas se aplana: el patrón de una regla es una
+        // sola línea de texto.
+        onSelectionMenu({
+          text: texto.replace(/\s+/g, " ").slice(0, 200),
+          x: event.clientX,
+          y: event.clientY,
+        });
+        return;
+      }
+      if (seleccion.size === 0) return;
       event.preventDefault();
-      // Una selección de varias filas se aplana: el patrón de una regla es una
-      // sola línea de texto.
-      onSelectionMenu({
-        text: seleccion.replace(/\s+/g, " ").slice(0, 200),
-        x: event.clientX,
-        y: event.clientY,
-      });
+      setMenuFilas({ x: event.clientX, y: event.clientY });
     },
-    [onSelectionMenu],
+    [onSelectionMenu, seleccion],
   );
 
   const handleWheel = useCallback(
@@ -310,13 +470,14 @@ export function LogGrid({
   };
 
   return (
-    <div
-      ref={parentRef}
-      className="grid-scroll"
-      onScroll={handleUserScroll}
-      onWheel={handleWheel}
-      onContextMenu={handleContextMenu}
-    >
+    <>
+      <div
+        ref={parentRef}
+        className="grid-scroll"
+        onScroll={handleUserScroll}
+        onWheel={handleWheel}
+        onContextMenu={handleContextMenu}
+      >
       <div className="grid-inner" style={{ width: totalWidth }}>
         <div className="grid-header">
           <span
@@ -352,9 +513,14 @@ export function LogGrid({
               <div
                 key={item.key}
                 className={`row level-${row?.level ?? "unknown"}${
-                  selected === item.index ? " selected" : ""
+                  seleccion.has(item.index) ? " selected" : ""
                 }`}
-                onClick={() => setSelected(item.index)}
+                onClick={(event) => handleRowClick(item.index, event)}
+                onMouseDown={(event) => {
+                  // Mayús+clic marca un rango de filas: no debe arrastrar además
+                  // la selección de texto del navegador.
+                  if (event.shiftKey) event.preventDefault();
+                }}
                 title={row?.raw}
                 style={{
                   position: "absolute",
@@ -391,5 +557,25 @@ export function LogGrid({
         </div>
       </div>
     </div>
+      {/* Fuera del contenedor: `.grid-scroll` lleva `contain: strict` y en él
+          `position: fixed` se resolvería contra la rejilla, no contra la
+          ventana. El portal lo cuelga del `body` para que el menú aparezca
+          donde está el puntero. */}
+      {createPortal(
+        <MenuFilas
+          open={menuFilas}
+          count={seleccion.size}
+          copiando={copiando}
+          onCopiar={(conNumeros) => void copiarSeleccion(conNumeros)}
+          onQuitar={() => {
+            setAncla(null);
+            setSeleccion(new Set());
+            setMenuFilas(null);
+          }}
+          onClose={() => setMenuFilas(null)}
+        />,
+        document.body,
+      )}
+    </>
   );
 }

@@ -195,6 +195,13 @@ export const IT: Record<ClaveTexto, string> = {
   "sel.copiar": "Copia",
   "sel.reglasTooltip": "Apri le regole di colore con questo testo come pattern",
   "sel.reglasCon": "Regole di colore con «{texto}»",
+  "sel.filasSeleccionadas": "{n} righe selezionate",
+  "sel.copiarFilas": "Copia selezione",
+  "sel.copiarFilasNumeros": "Copia con numeri di riga",
+  "sel.quitarSeleccion": "Deseleziona",
+  "sel.copiando": "Copia in corso…",
+  "sel.demasiadasFilas":
+    "La selezione è troppo grande per gli appunti: {n} righe",
 
   // Pie de estado.
   "status.sinSesion": "senza sessione",

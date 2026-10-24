@@ -197,6 +197,13 @@ export const ES = {
   "sel.copiar": "Copiar",
   "sel.reglasTooltip": "Abrir las reglas de color con este texto como patrón",
   "sel.reglasCon": "Reglas de color con «{texto}»",
+  "sel.filasSeleccionadas": "{n} líneas seleccionadas",
+  "sel.copiarFilas": "Copiar selección",
+  "sel.copiarFilasNumeros": "Copiar con números de línea",
+  "sel.quitarSeleccion": "Quitar selección",
+  "sel.copiando": "Copiando…",
+  "sel.demasiadasFilas":
+    "La selección es demasiado grande para el portapapeles: {n} líneas",
 
   // Pie de estado.
   "status.sinSesion": "sin sesión",

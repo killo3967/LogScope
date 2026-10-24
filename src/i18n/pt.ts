@@ -201,6 +201,13 @@ export const PT: Record<ClaveTexto, string> = {
   "sel.copiar": "Copiar",
   "sel.reglasTooltip": "Abrir as regras de cor com este texto como padrão",
   "sel.reglasCon": "Regras de cor com «{texto}»",
+  "sel.filasSeleccionadas": "{n} linhas selecionadas",
+  "sel.copiarFilas": "Copiar seleção",
+  "sel.copiarFilasNumeros": "Copiar com números de linha",
+  "sel.quitarSeleccion": "Limpar seleção",
+  "sel.copiando": "A copiar…",
+  "sel.demasiadasFilas":
+    "A seleção é demasiado grande para a área de transferência: {n} linhas",
 
   // Pie de estado.
   "status.sinSesion": "sem sessão",

@@ -198,6 +198,13 @@ export const DE: Record<ClaveTexto, string> = {
   "sel.copiar": "Kopieren",
   "sel.reglasTooltip": "Die Farbregeln mit diesem Text als Muster öffnen",
   "sel.reglasCon": "Farbregeln mit «{texto}»",
+  "sel.filasSeleccionadas": "{n} Zeilen ausgewählt",
+  "sel.copiarFilas": "Auswahl kopieren",
+  "sel.copiarFilasNumeros": "Mit Zeilennummern kopieren",
+  "sel.quitarSeleccion": "Auswahl aufheben",
+  "sel.copiando": "Wird kopiert…",
+  "sel.demasiadasFilas":
+    "Die Auswahl ist zu groß für die Zwischenablage: {n} Zeilen",
 
   // Pie de estado.
   "status.sinSesion": "ohne Sitzung",

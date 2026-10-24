@@ -42,11 +42,6 @@ Por qué ese orden: la selección múltiple es requisito de exportar y copiar; e
 filtro y el tail en combinadas comparten el trabajo del orden por instante; y la
 persistencia va al final, cuando ya exista todo lo que hay que recordar.
 
-- [ ] **Selección de varias líneas**. Hoy solo hay una fila marcada con el clic
-      (`selected: number | null` en `LogGrid.tsx`) y el menú de selección aparece
-      al marcar texto con el ratón. Hace falta selección por rango (Mayús+clic),
-      añadir y quitar líneas (Ctrl+clic) y decidir qué pasa con la selección al
-      cambiar el filtro o al entrar líneas por el tail.
 - [ ] **Filtro avanzado con grid propio**. Consulta estructurada sobre la sesión,
       del estilo «eventos WARN que contengan "tal", entre dos fechas y dentro de
       la franja de 12:07 a 15:29». El resultado se ve en un **segundo grid en la
@@ -146,14 +141,13 @@ persistencia va al final, cuando ya exista todo lo que hay que recordar.
       sobre las visibles. Formato: milisegundos si el log los trae; minutos y
       segundos enteros si no. Decidido: en la primera fila, vacío, y las líneas
       sin instante cortan la serie en vez de inventar un salto.
-- [ ] **Exportar y copiar la selección**. Menú contextual sobre las líneas
-      marcadas, con copiar y exportar a texto, con y sin número de línea. Copiar
-      se hace con `navigator.clipboard`, que ya se usa en `SelectionMenu.tsx`;
-      exportar a fichero necesita diálogo de guardado, que en Tauri 2 es
-      `tauri-plugin-dialog`: **dependencia nueva, hay que autorizarla antes de
-      añadirla** (comprobado: no está en `Cargo.toml` ni en `package.json`).
-      Propuesta: dos acciones (Copiar, Exportar…) y un conmutador «incluir número
-      de línea» recordado como preferencia, en vez de cuatro entradas.
+- [ ] **Exportar la selección a fichero**. Copiar ya está hecho (menú contextual
+      de la selección y Ctrl+C, con o sin número de línea). Falta exportar a un
+      fichero de texto, que en Tauri 2 necesita diálogo de guardado:
+      `tauri-plugin-dialog`, **dependencia nueva pendiente de autorizar**
+      (comprobado: no está en `Cargo.toml` ni en `package.json`). Alternativa sin
+      dependencia: escribir junto al log como `<nombre>-seleccion.txt` y avisar de
+      la ruta.
 - [ ] **Atajos de teclado**: `F12` pantalla completa (oculta las dos filas de la
       barra y deja el log con su cabecera), `F` follow tail, `S` scroll
       automático, `O` abrir un log. Detalles a resolver: no deben dispararse
@@ -214,7 +208,8 @@ persistencia va al final, cuando ya exista todo lo que hay que recordar.
 Las fases 0 a 2 están hechas: boceto, cáscara de interfaz (`f07482a`) e i18n con
 seis idiomas (`70b36cf`). Queda:
 
-3. **Selección múltiple + exportar y copiar** (~2 h): la primera función nueva.
+3. ~~**Selección múltiple + copiar**~~ — hecho. Queda **exportar a fichero**,
+   pendiente de autorizar `tauri-plugin-dialog`.
 4. **Filtro avanzado**, por partes: (a) núcleo con `Filters` ampliado y pruebas;
    (b) formulario y biblioteca de filtros; (c) grid inferior independiente con su
    Delta Time; (d) pregunta al abrir y persistencia; (e) ventanas propias.

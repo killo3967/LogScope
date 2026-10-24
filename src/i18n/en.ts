@@ -196,6 +196,13 @@ export const EN: Record<ClaveTexto, string> = {
   "sel.copiar": "Copy",
   "sel.reglasTooltip": "Open the color rules with this text as the pattern",
   "sel.reglasCon": "Color rules with «{texto}»",
+  "sel.filasSeleccionadas": "{n} lines selected",
+  "sel.copiarFilas": "Copy selection",
+  "sel.copiarFilasNumeros": "Copy with line numbers",
+  "sel.quitarSeleccion": "Clear selection",
+  "sel.copiando": "Copying…",
+  "sel.demasiadasFilas":
+    "The selection is too large for the clipboard: {n} lines",
 
   // Pie de estado.
   "status.sinSesion": "no session",

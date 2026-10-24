@@ -735,20 +735,23 @@ mark {
   font-variant-numeric: tabular-nums;
 }
 
-/* La fila marcada se distingue con un contorno, no con fondo: el fondo lo
-   sobrescribe el color de las reglas de resaltado, que va en estilo inline. */
+/* Las filas marcadas se distinguen con un contorno, no solo con fondo: el
+   fondo y la barra izquierda los sobrescriben las reglas de color, que van en
+   estilo inline y ganarían a cualquier regla de la hoja. El contorno no ocupa
+   ancho útil, así que el contenido no se desplaza al seleccionar. */
 .row {
   cursor: default;
 }
 
 .row.selected {
-  outline: 1px solid var(--accent);
-  outline-offset: -1px;
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
   background-color: #1e2733;
 }
 
 .row.selected .col-rowno {
   color: var(--accent);
+  font-weight: 600;
 }
 
 /* ------------------------------------------------------------------ ajustes */

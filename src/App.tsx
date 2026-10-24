@@ -739,6 +739,7 @@ export default function App() {
           autoScroll={autoScroll}
           onAutoScrollChange={setAutoScroll}
           onSelectionMenu={setSelectionMenu}
+          onAviso={setError}
           rules={activeRules}
           widths={widths}
           onWidthChange={handleWidthChange}
