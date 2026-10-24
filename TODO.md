@@ -9,46 +9,39 @@ los hitos del plan en [SPEC.md](SPEC.md); aquí solo lo que falta.
       distribuye un `.exe` suelto: sin instalador, sin acceso directo y con el
       aviso de SmartScreen por delante. Activarlo con `targets: ["nsis"]` y
       adjuntar el instalador a la release.
-- [ ] **Prueba de carga con 1 M de líneas** (M3 de `SPEC.md`). Lo medido es con
-      200 000 líneas: ingesta a 79,9 MB/s y página de 200 filas en 0,35 ms.
-      Falta comprobar RAM y que el scroll se mantenga por debajo de 16 ms por
-      frame con un millón.
-- [ ] **Probar la rotación del tail a mano** (M5 de `SPEC.md`). Truncado y
-      rotación están implementados y con pruebas unitarias, pero nunca se han
-      probado con un fichero real que se renombra o se reemplaza mientras la
-      aplicación lo sigue. También queda ver que la columna `#` no duplique
-      líneas al crecer.
+
+## Pruebas manuales pendientes
+
+Requieren la aplicación abierta y abrir a mano; no las puede hacer un script.
+
+- [ ] **Rotación del tail** (M5 de `SPEC.md`). Con un log abierto y el tail
+      activo, renombrar el fichero y crear otro con el mismo nombre: la vista debe
+      reiniciarse sin duplicar ni perder líneas. Repetir truncándolo a cero
+      (`type nul > fichero`) y comprobando que la columna `#` vuelve a empezar en
+      1. Truncado y rotación tienen pruebas unitarias, pero nunca se han visto con
+      un fichero real cambiando por debajo.
+- [ ] **Carga con 1 M de líneas** (M3 de `SPEC.md`). Generar un log de un millón de
+      líneas en formato log4net y abrirlo: medir RAM y comprobar que el scroll se
+      mantiene fluido (objetivo: menos de 16 ms por frame). Lo medido hasta ahora
+      es con 200 000 líneas: ingesta a 79,9 MB/s y página de 200 filas en 0,35 ms.
+- [ ] **Repaso de las traducciones en la app**. Cambiar de idioma en Ajustes y dar
+      una vuelta a cada uno (menú, barra, panel de propiedades, ajustes, pie de
+      estado, mensajes de error): longitudes que rompan la barra, términos
+      incoherentes o textos que suenen a traducción literal. Son 175 claves por
+      idioma y están escritas a mano, así que el repaso del nativo es la única
+      prueba que vale.
 
 ## Funciones pedidas
 
-Peticiones del dueño del proyecto. Orden recomendado: **decidir la interfaz
-(menú y barra) → selección múltiple → filtro avanzado → tail en combinadas →
-Delta Time → exportar y copiar → atajos → persistencia**.
+Peticiones del dueño del proyecto. Orden recomendado: **selección múltiple →
+filtro avanzado → tail en combinadas → Delta Time → exportar y copiar → atajos →
+persistencia**. La interfaz ya está decidida e implementada (menú de aplicación,
+barra corta y panel de propiedades).
 
-Por qué ese orden: la interfaz va primero porque decide dónde viven los botones
-de todo lo demás; la selección múltiple es requisito de exportar y copiar; el
+Por qué ese orden: la selección múltiple es requisito de exportar y copiar; el
 filtro y el tail en combinadas comparten el trabajo del orden por instante; y la
 persistencia va al final, cuando ya exista todo lo que hay que recordar.
 
-- [ ] **Simplificar la interfaz: menú superior, barra y accesos** (propuesta, sin
-      decidir). Hoy la primera fila lleva ruta, Examinar, Abrir, Columnas…,
-      Reglas…, Tail, Autoscroll y el engranaje; la segunda, filtro, siete chips de
-      nivel, Formato y Codificación. Con lo que falta por añadir (filtro avanzado,
-      pantalla completa, idioma, ventanas de filtro) se queda corta.
-      - **Opción A (recomendada)**: menú **solo para lo de la aplicación**
-        (Archivo, Ver, Herramientas, Ayuda: abrir, reabrir, pantalla completa,
-        ajustes, acerca de) y la barra para lo del log; **Formato, Codificación y
-        Columnas…** se van a un panel de *propiedades del fichero*, que se tocan al
-        abrir y casi nunca más.
-      - **Opción B**: menú completo. Libera la barra, pero esconde acciones de uso
-        constante (tail, autoscroll, filtro) a dos clics, y hay que construir y
-        traducir un menú por ventana abierta.
-      - **Opción C**: sin menú; un botón **⋯ Más** con lo poco frecuente y una
-        **paleta de comandos** (Ctrl+K) cuando lleguen los atajos.
-      - A favor del menú: descubre los atajos gratis (aceleradores), es lo que
-        espera un usuario de escritorio en Windows y permite manejar la aplicación
-        sin ratón. En contra: unos 24 px permanentes de alto, en un visor donde el
-        espacio vertical es el recurso escaso, y no se puede estilar.
 - [ ] **Selección de varias líneas**. Hoy solo hay una fila marcada con el clic
       (`selected: number | null` en `LogGrid.tsx`) y el menú de selección aparece
       al marcar texto con el ratón. Hace falta selección por rango (Mayús+clic),
@@ -218,17 +211,9 @@ persistencia va al final, cuando ya exista todo lo que hay que recordar.
 
 ## Plan de arranque
 
-Orden de ejecución propuesto, con el tamaño aproximado de cada fase. Las fases
-1 y 2 son la cáscara; no añaden funciones, solo colocan las que ya hay.
+Las fases 0 a 2 están hechas: boceto, cáscara de interfaz (`f07482a`) e i18n con
+seis idiomas (`70b36cf`). Queda:
 
-0. **Boceto de la interfaz** (horas): menú de aplicación, barra de dos filas con
-   los controles reducidos, panel de *propiedades del fichero* y sitio del botón
-   del filtro avanzado. Sin código.
-1. **Cáscara de interfaz** (~2-3 h): menú nativo de aplicación, barra reducida y
-   panel de propiedades con Formato, Codificación y Columnas…. Nada de lógica
-   nueva; lo que hoy funciona debe seguir funcionando igual.
-2. **i18n completo** (~2 h): diccionario inglés, selector en Ajustes, `Intl`.
-   Va aquí para no traducir etiquetas que la fase 1 acaba de mover.
 3. **Selección múltiple + exportar y copiar** (~2 h): la primera función nueva.
 4. **Filtro avanzado**, por partes: (a) núcleo con `Filters` ampliado y pruebas;
    (b) formulario y biblioteca de filtros; (c) grid inferior independiente con su
@@ -236,11 +221,12 @@ Orden de ejecución propuesto, con el tamaño aproximado de cada fase. Las fases
 5. **Tail en combinadas** (el trabajo delicado del núcleo): insertar por
    instante, invalidar caché y pruebas de fusión.
 6. **Delta Time del principal, atajos con editor y persistencia por fichero**.
-7. **Publicación**: NSIS, licencia, documentación en inglés, ficha y capturas.
+7. **Publicación**: NSIS, documentación en inglés, ficha y capturas. La licencia
+   ya está hecha.
 
-En paralelo y cuando apetezca, sin bloquea nada: la **licencia** (10 minutos) y
-las **dos pruebas manuales pendientes** (rotación del tail y carga de 1 M de
-líneas), que conviene hacer **antes** de tocar el código del tail.
+En paralelo y cuando apetezca, sin bloquear nada: las **pruebas manuales
+pendientes** de la sección de arriba. La de la rotación conviene hacerla **antes**
+de tocar el código del tail (fase 5), para saber qué funcionaba.
 
 ## Notas de proceso
 
