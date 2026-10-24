@@ -9,6 +9,22 @@ Mientras la versión mayor sea `0`, la parte menor puede romper compatibilidad:
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-24
+
+### Cambiado
+
+- Los textos de la interfaz salen de un catálogo central (`src/textos.ts`) y los
+  errores del núcleo viajan por código en lugar de como frases hechas. De cara a
+  quien usa la aplicación no cambia nada: es la preparación para poder traducirla
+  sin reescribir los componentes.
+
+### Documentación
+
+- README reescrito para quien usa la aplicación, con una captura real: qué hace,
+  cómo empezar y qué hay en cada parte de la ventana. La compilación, las pruebas
+  y la publicación se mueven a `requirements.md`.
+- `SPEC.md` con los hitos al día y el contrato con el núcleo actualizado.
+
 ## [0.2.0] - 2026-10-24
 
 ### Añadido
@@ -89,6 +105,7 @@ navegar por ellos y combinarlos.
 - El empaquetado NSIS está pendiente: `bundle.active` sigue en `false` y el
   binario se distribuye como ejecutable suelto.
 
-[Unreleased]: https://github.com/killo3967/LogScope/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/killo3967/LogScope/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/killo3967/LogScope/releases/tag/v0.2.1
 [0.2.0]: https://github.com/killo3967/LogScope/releases/tag/v0.2.0
 [0.1.0]: https://github.com/killo3967/LogScope/releases/tag/v0.1.0
