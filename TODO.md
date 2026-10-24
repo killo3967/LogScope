@@ -89,6 +89,34 @@ persistencia va al final, cuando ya exista todo lo que hay que recordar.
           depender del formato que se muestre en pantalla.
         - Las líneas **sin instante** quedan fuera cuando hay rango de fechas o
           franja horaria.
+- [ ] **Filtro avanzado en ventanas independientes** (pedido por el usuario). Hoy
+      el resultado se vería en el panel inferior; además tiene que poder **sacarse
+      a una ventana propia**, y poder tener **varias a la vez** (por ejemplo la
+      ventana principal con tres filtros). Con monitores grandes o varios
+      monitores, cada filtro en su ventana se lee mucho mejor que apilado abajo.
+      - **Notas técnicas**:
+        - Tauri 2 permite abrir ventanas con `WebviewWindow`. Las sesiones ya viven
+          en el estado de Rust (`AppState`), así que una ventana nueva puede pedir
+          `read_page` de la misma sesión sin duplicar nada.
+        - Cada ventana necesita su permiso: `capabilities/default.json` hoy cubre
+          solo la ventana `main`; habrá que añadir una capacidad para las ventanas
+          de filtro (patrón de etiqueta, p. ej. `filter-*`).
+        - El evento `log://appended` se emite con `app.emit`, que llega a **todas**
+          las ventanas, así que el tail funcionará en ellas sin cambios en Rust.
+        - La configuración (reglas de color, filtros guardados, anchos) vive en
+          `localStorage`, compartido porque todas las ventanas usan el mismo perfil
+          de WebView2; pero el navegador no avisa de los cambios entre ventanas de
+          forma fiable, así que hay que sincronizar con un evento de Tauri.
+        - El bundle es una sola entrada de Vite: hay que decidir cómo se abre la
+          vista de filtro (parámetro en la URL frente a una segunda entrada).
+        - Cerrar la ventana principal no debe dejar ventanas huérfanas apuntando a
+          sesiones cerradas.
+      - **Pendiente de decidir**: al sacar el filtro, ¿desaparece del panel inferior
+        o se queda también?; ¿cada ventana muestra un filtro guardado concreto o
+        puede cambiar de filtro dentro?; ¿se reabren al arrancar, con su posición y
+        tamaño?; ¿qué pasa con la ventana si se cierra la pestaña a la que
+        pertenece el filtro?
+
 - [ ] **Tail en vivo en vistas combinadas**. Hoy `start_tail` se rechaza con
       `tail_merged` (`lib.rs`) y la interfaz ni lo pide cuando la vista está
       combinada (`App.tsx`: `settings.startWithTail && !result.merged`). El orden
@@ -141,7 +169,8 @@ persistencia va al final, cuando ya exista todo lo que hay que recordar.
         y si el panel estaba abierto;
       - **tail y autoscroll por fichero** (hoy son preferencia global en
         `Settings`: `startWithTail`, `startWithAutoScroll`);
-      - alto del panel de filtro.
+      - alto del panel de filtro y, si algún día hay ventanas de filtro, su
+        posición, tamaño y qué filtro tenía cada una;
       Ajustes nuevos que salen de aquí: comportamiento al abrir un fichero con
       filtro guardado (preguntar o aplicar siempre).
       Cuidado: recordar una consulta restrictiva hace parecer que al fichero le
