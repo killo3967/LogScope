@@ -50,6 +50,8 @@ export const ES = {
   "toolbar.autoscrollActivarTooltip": "Activar el autoscroll",
   "toolbar.autoscrollDesactivarTooltip": "Desactivar el autoscroll",
   "toolbar.filtroPlaceholder": "Filtrar por texto…",
+  "toolbar.filtroAvanzadoActivoTooltip":
+    "El filtro avanzado sustituye este control mientras esté activo",
 
   // Panel de propiedades del fichero: lo detectado (solo lectura) y los
   // controles con los que se vuelve a abrir.
@@ -211,6 +213,41 @@ export const ES = {
   "sel.exportado": "Exportado a {ruta}",
   "sel.demasiadasFilas":
     "La selección es demasiado grande para el portapapeles: {n} líneas",
+
+  // Filtro avanzado. La ventana construye la consulta que el núcleo evalúa;
+  // aquí solo va lo que se lee en ella y en el chip de la barra.
+  "filtro.titulo": "Filtro avanzado",
+  "filtro.pista":
+    "Se cumplen todos los grupos; dentro de cada grupo, sus condiciones.",
+  "filtro.cerrar": "Cerrar",
+  "filtro.aplicar": "Aplicar",
+  "filtro.limpiar": "Limpiar",
+  "filtro.grupo": "Grupo {n}",
+  "filtro.anadirGrupo": "Añadir grupo",
+  "filtro.quitarGrupo": "Quitar grupo",
+  "filtro.anadirCondicion": "Añadir condición",
+  "filtro.quitarCondicion": "Quitar condición",
+  "filtro.conectorY": "Y",
+  "filtro.conectorO": "O",
+  "filtro.campo": "Campo",
+  "filtro.campo.texto": "Texto",
+  "filtro.campo.nivel": "Nivel",
+  "filtro.campo.fuente": "Fuente",
+  "filtro.comparacion": "Comparación",
+  "filtro.comparacion.contiene": "contiene",
+  "filtro.comparacion.igual": "es igual a",
+  "filtro.comparacion.empiezaPor": "empieza por",
+  "filtro.comparacion.terminaPor": "termina por",
+  "filtro.comparacion.regex": "expresión regular",
+  "filtro.valor": "Valor",
+  "filtro.negada": "NO",
+  "filtro.desde": "Desde",
+  "filtro.hasta": "Hasta",
+  "filtro.franja": "Franja horaria",
+  "filtro.fuentes": "Ficheros",
+  "filtro.chip": "Filtro avanzado",
+  "filtro.chipTooltip": "Editar el filtro avanzado",
+  "filtro.chipQuitar": "Quitar el filtro avanzado",
 
   // Pie de estado.
   "status.sinSesion": "sin sesión",

@@ -1034,3 +1034,139 @@ mark {
 .error-close:hover {
   opacity: 1;
 }
+
+/* ------------------------------------------------ filtro avanzado */
+
+/* Chip que sustituye al filtro de texto cuando hay consulta estructurada:
+   ancho máximo para que no estire la barra aunque el nombre del filtro crezca
+   al traducirse. */
+.chip.filtro-avanzado {
+  display: flex;
+  align-items: center;
+  max-width: 240px;
+  padding: 0;
+  border-radius: 10px;
+  background: rgba(76, 154, 255, 0.18);
+  border: 1px solid var(--accent);
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 12px;
+}
+
+.chip.filtro-avanzado .filtro-chip-texto,
+.chip.filtro-avanzado .filtro-chip-quitar {
+  flex: 0 1 auto;
+  min-width: 0;
+  padding: 2px 6px;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chip.filtro-avanzado .filtro-chip-texto {
+  border-radius: 10px 0 0 10px;
+}
+
+.chip.filtro-avanzado .filtro-chip-quitar {
+  flex: none;
+  border-radius: 0 10px 10px 0;
+  line-height: 1;
+  opacity: 0.75;
+}
+
+.chip.filtro-avanzado .filtro-chip-quitar:hover {
+  opacity: 1;
+}
+
+/* La ventana crece con el contenido: los grupos se apilan. */
+.browser.filtro {
+  width: min(860px, 94vw);
+  height: auto;
+  max-height: 88vh;
+}
+
+.filtro-body {
+  gap: 10px;
+}
+
+.filtro-grupo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.filtro-grupo-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.filtro-grupo-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+/* Una condición por fila: campo, comparación, valor, NO y quitar. */
+.filtro-condicion {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.filtro-condicion > select,
+.filtro-condicion > button,
+.filtro-negada {
+  flex: none;
+}
+
+.filtro-valor {
+  flex: 1;
+  min-width: 120px;
+  font-family: Consolas, "Cascadia Mono", monospace;
+}
+
+.filtro-bloque {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  min-width: 0;
+}
+
+.filtro-fila {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.filtro-horas {
+  display: flex;
+  gap: 6px;
+}
+
+.filtro-bloque-title {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Muchas fuentes: la lista se desplaza sin empujar el pie de la ventana. */
+.filtro-fuentes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  max-height: 132px;
+  overflow: auto;
+}

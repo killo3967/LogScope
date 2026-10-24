@@ -84,6 +84,63 @@ export interface PageResult {
 export interface Filters {
   levels: number | null;
   text: string | null;
+  /**
+   * Filtro avanzado de la pestaña. Si viene, sustituye a `levels` y `text`:
+   * el núcleo no combina la barra con la consulta estructurada.
+   */
+  avanzado?: FiltroAvanzado | null;
+}
+
+// ------------------------------------------------------- filtro avanzado
+
+/** Dato de la entrada contra el que compara una condición. */
+export type CampoFiltro = "texto" | "nivel" | "fuente";
+
+/** Cómo se compara el valor con el dato. */
+export type ComparacionFiltro =
+  | "contiene"
+  | "igual"
+  | "empiezaPor"
+  | "terminaPor"
+  | "regex";
+
+/** Cómo se combinan entre sí las condiciones de un grupo. */
+export type ConectorFiltro = "y" | "o";
+
+export interface CondicionFiltro {
+  campo: CampoFiltro;
+  comparacion: ComparacionFiltro;
+  valor: string;
+  /** Invierte el resultado de esta condición. */
+  negada: boolean;
+}
+
+export interface GrupoFiltro {
+  operador: ConectorFiltro;
+  condiciones: CondicionFiltro[];
+}
+
+/**
+ * Consulta estructurada que se manda al núcleo dentro de `Filters.avanzado`.
+ *
+ * Los nombres coinciden con el JSON que espera Rust (`camelCase`). El núcleo
+ * acepta que falten campos y `{}` no restringe; aquí se emiten siempre, con
+ * `null` o lista vacía para «sin restricción», que es lo que el formulario
+ * puede producir sin ambigüedad.
+ *
+ * `desdeMs`/`hastaMs` son la **hora de pared** del fichero (los dígitos que se
+ * ven), no un instante: para una fecha `YYYY-MM-DD` valen
+ * `Date.UTC(año, mes - 1, día)` y ese mismo valor `+ 86_399_999`. La franja va
+ * en minutos del día (`horas * 60 + minutos`).
+ */
+export interface FiltroAvanzado {
+  grupos: GrupoFiltro[];
+  desdeMs: number | null;
+  hastaMs: number | null;
+  horaDesde: number | null;
+  horaHasta: number | null;
+  /** Nombres de fuente; vacío = todas. */
+  fuentes: string[];
 }
 
 export interface Stats {

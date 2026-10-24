@@ -42,7 +42,11 @@ Por qué ese orden: la selección múltiple es requisito de exportar y copiar; e
 filtro y el tail en combinadas comparten el trabajo del orden por instante; y la
 persistencia va al final, cuando ya exista todo lo que hay que recordar.
 
-- [ ] **Filtro avanzado con grid propio**. Consulta estructurada sobre la sesión,
+- [ ] **Filtro avanzado con grid propio**. Hecha la primera mitad: el formulario
+      por grupos, la evaluación en el núcleo y la aplicación a la rejilla
+      principal. Queda el segundo grid, la biblioteca de filtros con nombre, la
+      pregunta al abrir un fichero con filtro guardado y las ventanas propias.
+      Consulta estructurada sobre la sesión,
       del estilo «eventos WARN que contengan "tal", entre dos fechas y dentro de
       la franja de 12:07 a 15:29». El resultado se ve en un **segundo grid en la
       parte inferior**, con su propia zona de filtros, que se puede ocultar y

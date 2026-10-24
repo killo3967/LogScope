@@ -51,6 +51,8 @@ export const EN: Record<ClaveTexto, string> = {
   "toolbar.autoscrollActivarTooltip": "Enable autoscroll",
   "toolbar.autoscrollDesactivarTooltip": "Disable autoscroll",
   "toolbar.filtroPlaceholder": "Filter by text…",
+  "toolbar.filtroAvanzadoActivoTooltip":
+    "The advanced filter replaces this control while it is active",
 
   // Panel de propiedades del fichero: lo detectado (solo lectura) y los
   // controles con los que se vuelve a abrir.
@@ -210,6 +212,41 @@ export const EN: Record<ClaveTexto, string> = {
   "sel.exportado": "Exported to {ruta}",
   "sel.demasiadasFilas":
     "The selection is too large for the clipboard: {n} lines",
+
+  // Filtro avanzado. La ventana construye la consulta que el núcleo evalúa;
+  // aquí solo va lo que se lee en ella y en el chip de la barra.
+  "filtro.titulo": "Advanced filter",
+  "filtro.pista":
+    "Every group must match; within each group, its conditions.",
+  "filtro.cerrar": "Close",
+  "filtro.aplicar": "Apply",
+  "filtro.limpiar": "Clear",
+  "filtro.grupo": "Group {n}",
+  "filtro.anadirGrupo": "Add group",
+  "filtro.quitarGrupo": "Remove group",
+  "filtro.anadirCondicion": "Add condition",
+  "filtro.quitarCondicion": "Remove condition",
+  "filtro.conectorY": "AND",
+  "filtro.conectorO": "OR",
+  "filtro.campo": "Field",
+  "filtro.campo.texto": "Text",
+  "filtro.campo.nivel": "Level",
+  "filtro.campo.fuente": "Source",
+  "filtro.comparacion": "Comparison",
+  "filtro.comparacion.contiene": "contains",
+  "filtro.comparacion.igual": "equals",
+  "filtro.comparacion.empiezaPor": "starts with",
+  "filtro.comparacion.terminaPor": "ends with",
+  "filtro.comparacion.regex": "regular expression",
+  "filtro.valor": "Value",
+  "filtro.negada": "NOT",
+  "filtro.desde": "From",
+  "filtro.hasta": "To",
+  "filtro.franja": "Time range",
+  "filtro.fuentes": "Files",
+  "filtro.chip": "Advanced filter",
+  "filtro.chipTooltip": "Edit the advanced filter",
+  "filtro.chipQuitar": "Remove the advanced filter",
 
   // Pie de estado.
   "status.sinSesion": "no session",

@@ -15,6 +15,10 @@ interface Props {
   onMaskChange: (value: number) => void;
   text: string;
   onTextChange: (value: string) => void;
+  /** Hay un filtro avanzado activo: la barra queda sustituida. */
+  filtroAvanzado: boolean;
+  onFiltroAvanzado: () => void;
+  onQuitarFiltroAvanzado: () => void;
   tailing: boolean;
   tailEnabled: boolean;
   onToggleTail: () => void;
@@ -155,8 +159,32 @@ export function Toolbar(props: Props) {
           placeholder={t("toolbar.filtroPlaceholder")}
           value={props.text}
           onChange={(event) => props.onTextChange(event.target.value)}
-          disabled={props.disabled}
+          disabled={props.disabled || props.filtroAvanzado}
+          title={
+            props.filtroAvanzado ? t("toolbar.filtroAvanzadoActivoTooltip") : undefined
+          }
         />
+        {props.filtroAvanzado && (
+          <span
+            className="chip filtro-avanzado"
+            title={t("filtro.chipTooltip")}
+          >
+            <button
+              className="filtro-chip-texto"
+              onClick={props.onFiltroAvanzado}
+              title={t("filtro.chipTooltip")}
+            >
+              {t("filtro.chip")}
+            </button>
+            <button
+              className="filtro-chip-quitar"
+              onClick={props.onQuitarFiltroAvanzado}
+              title={t("filtro.chipQuitar")}
+            >
+              ✕
+            </button>
+          </span>
+        )}
         <div className="levels">
           {LEVELS.map((level) => (
             <button
@@ -165,6 +193,12 @@ export function Toolbar(props: Props) {
                 props.mask & LEVEL_BIT[level] ? "on" : "off"
               }`}
               onClick={() => toggleLevel(level)}
+              disabled={props.filtroAvanzado}
+              title={
+                props.filtroAvanzado
+                  ? t("toolbar.filtroAvanzadoActivoTooltip")
+                  : undefined
+              }
             >
               {level}
             </button>
@@ -199,6 +233,21 @@ export function Toolbar(props: Props) {
             style={{ left: menuPos.x, top: menuPos.y }}
             role="menu"
           >
+            <button
+              className="menu-item"
+              role="menuitem"
+              title={t("filtro.chipTooltip")}
+              disabled={props.disabled}
+              onClick={() => {
+                cerrarMenu();
+                props.onFiltroAvanzado();
+              }}
+            >
+              {/* Los puntos suspensivos son de «abre una ventana», no del
+                  título: la ventana ya se llama como esta clave. */}
+              {t("filtro.titulo")}…
+            </button>
+            <div className="menu-sep" />
             <button
               className="menu-item"
               role="menuitem"

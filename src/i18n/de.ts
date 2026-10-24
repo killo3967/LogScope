@@ -52,6 +52,8 @@ export const DE: Record<ClaveTexto, string> = {
   "toolbar.autoscrollActivarTooltip": "Autoscroll einschalten",
   "toolbar.autoscrollDesactivarTooltip": "Autoscroll ausschalten",
   "toolbar.filtroPlaceholder": "Nach Text filtern…",
+  "toolbar.filtroAvanzadoActivoTooltip":
+    "Der erweiterte Filter ersetzt dieses Steuerelement, solange er aktiv ist",
 
   // Panel de propiedades del fichero.
   "props.titulo": "Dateieigenschaften",
@@ -212,6 +214,41 @@ export const DE: Record<ClaveTexto, string> = {
   "sel.exportado": "Exportiert nach {ruta}",
   "sel.demasiadasFilas":
     "Die Auswahl ist zu groß für die Zwischenablage: {n} Zeilen",
+
+  // Filtro avanzado. La ventana construye la consulta que el núcleo evalúa;
+  // aquí solo va lo que se lee en ella y en el chip de la barra.
+  "filtro.titulo": "Erweiterter Filter",
+  "filtro.pista":
+    "Alle Gruppen müssen zutreffen; innerhalb einer Gruppe gelten ihre Bedingungen.",
+  "filtro.cerrar": "Schließen",
+  "filtro.aplicar": "Anwenden",
+  "filtro.limpiar": "Leeren",
+  "filtro.grupo": "Gruppe {n}",
+  "filtro.anadirGrupo": "Gruppe hinzufügen",
+  "filtro.quitarGrupo": "Gruppe entfernen",
+  "filtro.anadirCondicion": "Bedingung hinzufügen",
+  "filtro.quitarCondicion": "Bedingung entfernen",
+  "filtro.conectorY": "UND",
+  "filtro.conectorO": "ODER",
+  "filtro.campo": "Feld",
+  "filtro.campo.texto": "Text",
+  "filtro.campo.nivel": "Ebene",
+  "filtro.campo.fuente": "Quelle",
+  "filtro.comparacion": "Vergleich",
+  "filtro.comparacion.contiene": "enthält",
+  "filtro.comparacion.igual": "ist gleich",
+  "filtro.comparacion.empiezaPor": "beginnt mit",
+  "filtro.comparacion.terminaPor": "endet mit",
+  "filtro.comparacion.regex": "regulärer Ausdruck",
+  "filtro.valor": "Wert",
+  "filtro.negada": "NICHT",
+  "filtro.desde": "Von",
+  "filtro.hasta": "Bis",
+  "filtro.franja": "Zeitfenster",
+  "filtro.fuentes": "Dateien",
+  "filtro.chip": "Erweiterter Filter",
+  "filtro.chipTooltip": "Erweiterten Filter bearbeiten",
+  "filtro.chipQuitar": "Erweiterten Filter entfernen",
 
   // Pie de estado.
   "status.sinSesion": "ohne Sitzung",

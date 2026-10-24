@@ -50,6 +50,8 @@ export const IT: Record<ClaveTexto, string> = {
   "toolbar.autoscrollActivarTooltip": "Attiva l'autoscroll",
   "toolbar.autoscrollDesactivarTooltip": "Disattiva l'autoscroll",
   "toolbar.filtroPlaceholder": "Filtra per testo…",
+  "toolbar.filtroAvanzadoActivoTooltip":
+    "Il filtro avanzato sostituisce questo controllo finché è attivo",
 
   // Panel de propiedades del fichero.
   "props.titulo": "Proprietà del file",
@@ -209,6 +211,41 @@ export const IT: Record<ClaveTexto, string> = {
   "sel.exportado": "Esportato in {ruta}",
   "sel.demasiadasFilas":
     "La selezione è troppo grande per gli appunti: {n} righe",
+
+  // Filtro avanzado. La ventana construye la consulta que el núcleo evalúa;
+  // aquí solo va lo que se lee en ella y en el chip de la barra.
+  "filtro.titulo": "Filtro avanzato",
+  "filtro.pista":
+    "Tutti i gruppi devono essere soddisfatti; all'interno di ogni gruppo, le sue condizioni.",
+  "filtro.cerrar": "Chiudi",
+  "filtro.aplicar": "Applica",
+  "filtro.limpiar": "Pulisci",
+  "filtro.grupo": "Gruppo {n}",
+  "filtro.anadirGrupo": "Aggiungi gruppo",
+  "filtro.quitarGrupo": "Rimuovi gruppo",
+  "filtro.anadirCondicion": "Aggiungi condizione",
+  "filtro.quitarCondicion": "Rimuovi condizione",
+  "filtro.conectorY": "E",
+  "filtro.conectorO": "O",
+  "filtro.campo": "Campo",
+  "filtro.campo.texto": "Testo",
+  "filtro.campo.nivel": "Livello",
+  "filtro.campo.fuente": "Fonte",
+  "filtro.comparacion": "Confronto",
+  "filtro.comparacion.contiene": "contiene",
+  "filtro.comparacion.igual": "è uguale a",
+  "filtro.comparacion.empiezaPor": "inizia per",
+  "filtro.comparacion.terminaPor": "finisce per",
+  "filtro.comparacion.regex": "espressione regolare",
+  "filtro.valor": "Valore",
+  "filtro.negada": "NO",
+  "filtro.desde": "Da",
+  "filtro.hasta": "A",
+  "filtro.franja": "Fascia oraria",
+  "filtro.fuentes": "File",
+  "filtro.chip": "Filtro avanzato",
+  "filtro.chipTooltip": "Modifica il filtro avanzato",
+  "filtro.chipQuitar": "Rimuovi il filtro avanzato",
 
   // Pie de estado.
   "status.sinSesion": "senza sessione",

@@ -54,6 +54,8 @@ export const PT: Record<ClaveTexto, string> = {
   "toolbar.autoscrollActivarTooltip": "Ativar o autoscroll",
   "toolbar.autoscrollDesactivarTooltip": "Desativar o autoscroll",
   "toolbar.filtroPlaceholder": "Filtrar por texto…",
+  "toolbar.filtroAvanzadoActivoTooltip":
+    "O filtro avançado substitui este controlo enquanto estiver ativo",
 
   // Panel de propiedades del fichero: lo detectado (solo lectura) y los
   // controles con los que se vuelve a abrir.
@@ -215,6 +217,41 @@ export const PT: Record<ClaveTexto, string> = {
   "sel.exportado": "Exportado para {ruta}",
   "sel.demasiadasFilas":
     "A seleção é demasiado grande para a área de transferência: {n} linhas",
+
+  // Filtro avanzado. La ventana construye la consulta que el núcleo evalúa;
+  // aquí solo va lo que se lee en ella y en el chip de la barra.
+  "filtro.titulo": "Filtro avançado",
+  "filtro.pista":
+    "Todos os grupos têm de ser cumpridos; dentro de cada grupo, as suas condições.",
+  "filtro.cerrar": "Fechar",
+  "filtro.aplicar": "Aplicar",
+  "filtro.limpiar": "Limpar",
+  "filtro.grupo": "Grupo {n}",
+  "filtro.anadirGrupo": "Adicionar grupo",
+  "filtro.quitarGrupo": "Remover grupo",
+  "filtro.anadirCondicion": "Adicionar condição",
+  "filtro.quitarCondicion": "Remover condição",
+  "filtro.conectorY": "E",
+  "filtro.conectorO": "OU",
+  "filtro.campo": "Campo",
+  "filtro.campo.texto": "Texto",
+  "filtro.campo.nivel": "Nível",
+  "filtro.campo.fuente": "Fonte",
+  "filtro.comparacion": "Comparação",
+  "filtro.comparacion.contiene": "contém",
+  "filtro.comparacion.igual": "é igual a",
+  "filtro.comparacion.empiezaPor": "começa por",
+  "filtro.comparacion.terminaPor": "termina em",
+  "filtro.comparacion.regex": "expressão regular",
+  "filtro.valor": "Valor",
+  "filtro.negada": "NÃO",
+  "filtro.desde": "De",
+  "filtro.hasta": "Até",
+  "filtro.franja": "Faixa horária",
+  "filtro.fuentes": "Ficheiros",
+  "filtro.chip": "Filtro avançado",
+  "filtro.chipTooltip": "Editar o filtro avançado",
+  "filtro.chipQuitar": "Remover o filtro avançado",
 
   // Pie de estado.
   "status.sinSesion": "sem sessão",

@@ -18,6 +18,13 @@ Mientras la versión mayor sea `0`, la parte menor puede romper compatibilidad:
 
 ### Añadido
 
+- **Filtro avanzado**: ventana con grupos de condiciones combinables con **Y** u
+  **O** (sobre el texto de la entrada, el nivel o el fichero de origen; contiene,
+  igual, empieza por, termina por o expresión regular, cada una con **NO**), más
+  rango de fechas, franja horaria y filtrado por fichero en las vistas
+  combinadas. Mientras está activo **sustituye a la barra**, y su chip permite
+  volver a editarlo o quitarlo. Falta la biblioteca de filtros con nombre y el
+  grid propio.
 - **Zona horaria del log** en Propiedades: la del equipo (por defecto) o un
   desfase fijo (UTC, UTC−08:00, UTC+02:00…). No cambia lo que se ve —la rejilla
   sigue mostrando los dígitos del fichero— sino el instante real de cada entrada,

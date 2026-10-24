@@ -7,6 +7,7 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { ColumnMapper } from "./ColumnMapper";
 import { setIdioma, useIdioma } from "./textos";
 import { FileBrowser } from "./FileBrowser";
+import { FiltroAvanzado } from "./FiltroAvanzado";
 import { HighlightRules, PALETTE } from "./HighlightRules";
 import { LogGrid } from "./LogGrid";
 import { useMenuApp } from "./MenuApp";
@@ -18,6 +19,7 @@ import { TabMenu } from "./TabMenu";
 import { Toolbar } from "./Toolbar";
 import type {
   EncodingKind,
+  FiltroAvanzado as FiltroAvanzadoModelo,
   Filters,
   HighlightRule,
   OpenResult,
@@ -56,6 +58,8 @@ interface Tab {
   session: OpenResult;
   mask: number;
   text: string;
+  /** Consulta estructurada de la pestaña; sustituye a `mask` y `text`. */
+  filtro?: FiltroAvanzadoModelo | null;
   tailing: boolean;
   mapping: string[] | null;
   generation: number;
@@ -104,6 +108,7 @@ export default function App() {
   const [mapperOpen, setMapperOpen] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [filtroOpen, setFiltroOpen] = useState(false);
   // El arranque solo intenta reabrir una vez, aunque cambien los ajustes.
   const restoreTried = useRef(false);
 
@@ -218,6 +223,7 @@ export default function App() {
           session: result,
           mask: ALL_LEVELS,
           text: "",
+          filtro: null,
           tailing,
           mapping,
           generation: 0,
@@ -384,15 +390,43 @@ export default function App() {
     };
   }, []);
 
+  // Filtro avanzado de la pestaña activa. Es estado derivado: el indicador de
+  // la barra y la consulta que se manda al núcleo salen de aquí, no de un flag
+  // aparte que se pueda desincronizar.
+  const filtroAvanzado = active?.filtro ?? null;
+  const hayFiltroAvanzado = filtroAvanzado !== null;
+
+  // Con filtro avanzado se sustituye la barra entera: el núcleo no combina la
+  // consulta estructurada con los chips de nivel ni con el texto.
   const filters = useMemo<Filters>(
-    () => ({
-      levels: !active || active.mask === ALL_LEVELS ? null : active.mask,
-      text: active && active.text.trim() !== "" ? active.text.trim() : null,
-    }),
-    [active?.mask, active?.text],
+    () =>
+      filtroAvanzado
+        ? { levels: null, text: null, avanzado: filtroAvanzado }
+        : {
+            levels: !active || active.mask === ALL_LEVELS ? null : active.mask,
+            text: active && active.text.trim() !== "" ? active.text.trim() : null,
+            avanzado: null,
+          },
+    [filtroAvanzado, active?.mask, active?.text],
   );
 
-  const filterKey = `${active?.mask ?? ALL_LEVELS}|${active?.text ?? ""}`;
+  // La clave incluye el filtro para que la rejilla vuelva a pedir la primera
+  // página: si solo cambiara el objeto, el grid no sabría que el filtro cambió.
+  const filterKey = filtroAvanzado
+    ? `avanzado|${JSON.stringify(filtroAvanzado)}`
+    : `${active?.mask ?? ALL_LEVELS}|${active?.text ?? ""}`;
+
+  const aplicarFiltroAvanzado = useCallback(
+    (filtro: FiltroAvanzadoModelo | null) => {
+      if (active) updateTab(active.id, { filtro });
+      setFiltroOpen(false);
+    },
+    [active, updateTab],
+  );
+
+  const quitarFiltroAvanzado = useCallback(() => {
+    if (active) updateTab(active.id, { filtro: null });
+  }, [active, updateTab]);
 
   // Las reglas de color son del fichero, no globales: la clave es su ruta, así
   // que el mismo log recupera su colorización aunque cambie el id de sesión.
@@ -653,6 +687,9 @@ export default function App() {
         onMaskChange={(value) => active && updateTab(active.id, { mask: value })}
         text={active?.text ?? ""}
         onTextChange={(value) => active && updateTab(active.id, { text: value })}
+        filtroAvanzado={hayFiltroAvanzado}
+        onFiltroAvanzado={() => setFiltroOpen(true)}
+        onQuitarFiltroAvanzado={quitarFiltroAvanzado}
         tailing={active?.tailing ?? false}
         tailEnabled={!!active && !active.session.merged}
         onToggleTail={handleToggleTail}
@@ -809,6 +846,15 @@ export default function App() {
         busy={busy}
         onClose={() => setMapperOpen(false)}
         onApply={handleApplyMapping}
+      />
+
+      <FiltroAvanzado
+        open={filtroOpen}
+        filtro={filtroAvanzado}
+        fuentes={active?.session.sources ?? []}
+        combinada={!!active?.session.merged}
+        onClose={() => setFiltroOpen(false)}
+        onApply={aplicarFiltroAvanzado}
       />
 
       <HighlightRules
