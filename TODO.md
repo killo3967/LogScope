@@ -54,9 +54,10 @@ persistencia va al final, cuando ya exista todo lo que hay que recordar.
       - El panel es **por pestaña**: aparece solo donde se pidió y desaparece al
         cambiar a otra que no lo tenga.
       - **Vale también para pestañas con ficheros combinados**: el filtro se
-        aplica al orden entremezclado por instante, no a cada fuente. Ahí tiene
-        sentido añadir la **fuente** como condición (la columna `Source` ya
-        existe).
+        aplica al orden entremezclado por instante, no a cada fuente. Y hay que
+        poder **filtrar por fuente** como una condición más (la columna `Source`
+        ya existe): es lo que permite quedarse con uno solo de los ficheros de la
+        vista combinada. **Decidido: se hace.**
       - **Decisiones cerradas**:
         - La consulta se edita en una **ventana con formulario**, con **grupos**:
           dentro de cada grupo las condiciones se unen con **Y** o con **O**, los
@@ -68,6 +69,9 @@ persistencia va al final, cuando ya exista todo lo que hay que recordar.
           sigue mandando en el grid principal y deja de aplicar al de abajo.
         - Panel **redimensionable** (un tercio de la pantalla como alto inicial) y
           recuerda su alto.
+        - El grid de abajo tiene **columnas visibles y anchos propios**,
+          independientes del principal: arrastrar `Message` arriba no toca el de
+          abajo. Solo se comparte la lista de columnas disponibles del fichero.
         - Los filtros llevan **nombre**, se guardan **por fichero y además en una
           biblioteca común** reutilizable entre logs, con **Guardar** y **Guardar
           como…**.
@@ -129,8 +133,9 @@ persistencia va al final, cuando ya exista todo lo que hay que recordar.
 - [ ] **Persistencia de la configuración por fichero**. Todo lo que se ajuste
       sobre un log se recuerda para la próxima vez. Ya se guardan parser, mapeo,
       codificación y reglas de color (clave `sourceKey`). Añadir:
-      - columnas visibles y sus **anchos por fichero** (hoy `logscope.columnWidths.v1`
-        es global y por nombre de columna);
+      - columnas visibles y sus **anchos por fichero y por grid** (hoy
+        `logscope.columnWidths.v1` es global, por nombre de columna y única para
+        todo);
       - Delta Time;
       - filtros avanzados con nombre: cuáles tiene el fichero, cuál estaba activo
         y si el panel estaba abierto;
