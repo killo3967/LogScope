@@ -82,23 +82,39 @@ Peticiones del dueño del proyecto, en el orden en que conviene atacarlas.
         cada fuente por separado; y ahí tiene sentido añadir la **fuente** como
         condición, para quedarse con uno solo de los ficheros de la vista
         combinada (la columna `Source` ya existe).
-      - En una pestaña combinada el tail está desactivado hoy: si el grid de
-        abajo debe poder seguir en vivo una vista combinada, hay que resolver
-        antes el reordenado por instante con líneas entrando (ver «Vista
-        combinada» en `README.md` y `SPEC.md`).
-      - **Decidido con el usuario**: la consulta se edita en una **ventana con
-        formulario** (nada de sintaxis de texto, las fechas y horas se escriben
-        mal); admite **AND, OR y NOT**; el rango de fechas es **entre dos fechas
-        cualesquiera** y la franja horaria se aplica **a todos los días** de ese
-        rango; el filtro **sustituye** a los niveles y el texto de la barra —para
-        el grid de abajo, la barra sigue mandando en el principal—; y los filtros
-        **se guardan con nombre por fichero**, para poder cargarlos más adelante.
-      - Pendiente de decidir: forma exacta del formulario (grupos con paréntesis
-        o lista plana), si además de los filtros del fichero hay una biblioteca
-        común, dónde se guardan (localStorage o fichero exportable/importable), si
-        al reabrir el fichero se restaura el último filtro con el panel abierto, si
-        el panel se puede redimensionar, si el grid de abajo debe seguir en vivo en
-        pestañas combinadas y si en combinadas se puede filtrar por fuente.
+      - **Decisiones cerradas con el usuario**:
+        - La consulta se edita en una **ventana con formulario**, con **grupos**:
+          dentro de cada grupo las condiciones se unen con **Y** o con **O**, los
+          grupos se unen entre sí con **Y**, y cada condición admite **NO**.
+        - El rango es **entre dos fechas cualesquiera** (día, sin hora) y la
+          franja horaria se repite **todos los días** de ese rango; la franja
+          puede **cruzar medianoche** (22:00–02:00 = 22:00–23:59 y 00:00–02:00 del
+          día siguiente).
+        - El filtro **sustituye** a los niveles y el texto de la barra: la barra
+          sigue mandando en el grid principal y deja de aplicar al de abajo.
+        - El panel es **redimensionable** (un tercio como alto inicial) y
+          recuerda su alto.
+        - Los filtros llevan **nombre**, se guardan **por fichero y además en una
+          biblioteca común** reutilizable entre logs, con **Guardar** y **Guardar
+          como…**.
+        - Al abrir un fichero con filtro guardado se **pregunta** si aplicarlo, y
+          en Ajustes se puede elegir que pregunte siempre o que aplique sin
+          preguntar.
+        - Almacenamiento en `localStorage` (como las reglas de color); exportar e
+          importar filtros a fichero queda como paso siguiente.
+
+- [ ] **Tail en vivo en vistas combinadas** (requisito nuevo del usuario).
+      Hoy `start_tail` se rechaza con `tail_merged` porque el orden de una vista
+      combinada es `Vec<(ts, source_idx, entry_idx)>` ordenado por instante: cada
+      línea nueva hay que insertarla en su sitio, no al final. Hace falta:
+      - insertar por instante con búsqueda binaria sobre `order`, manteniendo la
+        ronda entre fuentes cuando varias traen el mismo instante;
+      - avisar a la interfaz sin romper el grid virtualizado: hoy
+        `sync_single_source` solo empuja índices al final, y con inserciones en
+        medio hay que invalidar la caché de páginas y recolocar el scroll y la
+        fila marcada;
+      - pruebas de fusión con líneas entrando en varias fuentes a la vez.
+      Lo necesitan tanto el grid principal como el panel de filtro avanzado.
 
 - [ ] **Persistencia de la configuración por fichero**: todo lo que se ajuste
       sobre un log se recuerda para la próxima vez. Ya se guardan parser, mapeo de
@@ -106,7 +122,9 @@ Peticiones del dueño del proyecto, en el orden en que conviene atacarlas.
       anchos, Delta Time, y los filtros avanzados **con nombre**: el fichero
       recuerda cuáles tiene, cuál estaba activo y si el panel estaba abierto.
       También el tail y el autoscroll pasan a guardarse **por fichero** (hoy son
-      preferencia global). Cuidado con recordar una consulta restrictiva: puede
+      preferencia global), y el alto del panel de filtro. Ajustes nuevos:
+      comportamiento al abrir un fichero con filtro guardado (preguntar o aplicar
+      siempre) y, más adelante, el editor de atajos. Cuidado con recordar una consulta restrictiva: puede
       parecer que al fichero le faltan líneas, así que hace falta un indicador
       visible y una forma clara de limpiarla.
 
