@@ -105,6 +105,12 @@ pub struct OpenOptions {
     /// Codificación del fichero: `auto` (por defecto) o una forzada.
     #[serde(default)]
     pub encoding: Option<String>,
+    /// Zona horaria del fichero: desplazamiento fijo en minutos respecto de UTC
+    /// (`zonaHoraria: 120` = UTC+2, `-300` = UTC-5). Ausente o `null` = la zona
+    /// del equipo. No cambia los dígitos que se muestran: solo el instante real
+    /// con el que se ordenan y se combinan las fuentes.
+    #[serde(default, rename = "zonaHoraria")]
+    pub zona_horaria: Option<i32>,
 }
 
 #[derive(Serialize)]
@@ -124,6 +130,9 @@ pub struct OpenResult {
     pub sample_lines: Vec<String>,
     /// Propuesta de papel por sub-línea.
     pub proposed_mapping: Vec<String>,
+    /// Zona horaria aplicada a las fuentes, en minutos respecto de UTC.
+    /// `None` = la del equipo.
+    pub zona_horaria: Option<i32>,
 }
 
 #[derive(Serialize)]
@@ -287,6 +296,9 @@ fn load_source(path: &PathBuf, options: &OpenOptions) -> Result<EntryTable, Stri
 
     let parser = build_parser(options, &head)?;
     let mut table = EntryTable::with_encoding(parser, encoding_de(options));
+    // La zona horaria se fija antes de ingerir: decide el instante real de cada
+    // entrada, no los dígitos que se muestran.
+    table.set_zona(options.zona_horaria);
     table.ingest_bytes(&head);
 
     let mut buf = vec![0u8; CHUNK];
@@ -338,6 +350,7 @@ pub fn deteccion_automatica(head: &[u8]) -> Arc<dyn LogParser> {
         delimiter: None,
         mapping: None,
         encoding: None,
+        zona_horaria: None,
     };
     build_parser(&options, head).unwrap_or_else(|_| AutoParser::new())
 }
@@ -403,6 +416,7 @@ fn open_files(
         merged: set.is_merged(),
         sample_lines,
         proposed_mapping,
+        zona_horaria: options.zona_horaria,
     };
 
     let session = Session::new(id.clone(), files[0].clone(), set);
@@ -594,6 +608,7 @@ mod tests {
             delimiter: None,
             mapping: None,
             encoding: None,
+            zona_horaria: None,
         }
     }
 
@@ -682,6 +697,36 @@ mod tests {
         }
         std::fs::write(&path, bytes).unwrap();
         path
+    }
+
+    #[test]
+    fn la_zona_horaria_del_fichero_llega_a_la_tabla() {
+        let path = escribe("zona", "2026-10-22 10:00:00 INFO hola\n");
+
+        // El nombre JSON es `zonaHoraria`, en minutos respecto de UTC.
+        let mut opciones: OpenOptions = serde_json::from_str(
+            r#"{"path":"x","zonaHoraria":120}"#,
+        )
+        .expect("deserializar opciones");
+        assert_eq!(opciones.zona_horaria, Some(120));
+
+        let set = load_sources(&[path.clone()], &opciones).expect("debería abrirse");
+        let tabla = &set.sources[0].table;
+        assert_eq!(tabla.zona(), Some(120));
+
+        // Los dígitos que se muestran no cambian con la zona…
+        let row = set.row(0);
+        assert_eq!(row.fecha.as_deref(), Some("2026-10-22"));
+        assert_eq!(row.hora.as_deref(), Some("10:00:00.000"));
+        // …pero el instante real sí: lo escrito en UTC+2 son dos horas menos.
+        assert_eq!(tabla.instant_at(0), tabla.ts_at(0) - 2 * 3_600_000);
+
+        // Sin `zonaHoraria` manda la zona del equipo.
+        opciones.zona_horaria = None;
+        let sin_zona = load_sources(&[path.clone()], &opciones).expect("debería abrirse");
+        assert_eq!(sin_zona.sources[0].table.zona(), None);
+
+        let _ = std::fs::remove_file(path);
     }
 
     #[test]

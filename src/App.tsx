@@ -70,6 +70,8 @@ export default function App() {
   );
   const [delimiter, setDelimiter] = useState(",");
   const [encoding, setEncoding] = useState<EncodingKind>("auto");
+  // Minutos respecto de UTC; null = zona del equipo.
+  const [zonaHoraria, setZonaHoraria] = useState<number | null>(null);
 
   const [tabs, setTabs] = useState<Tab[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -161,6 +163,7 @@ export default function App() {
         pattern: string;
         delimiter: string;
         encoding?: EncodingKind;
+        zonaHoraria?: number | null;
       },
     ) => {
       if (targets.length === 0) return;
@@ -168,6 +171,8 @@ export default function App() {
       const patternToUse = override?.pattern ?? pattern;
       const delimiterToUse = override?.delimiter ?? delimiter;
       const encodingToUse = override?.encoding ?? encoding;
+      const zonaToUse =
+        override?.zonaHoraria !== undefined ? override.zonaHoraria : zonaHoraria;
       setBusy(true);
       setError(null);
       try {
@@ -180,6 +185,7 @@ export default function App() {
             delimiter: parserToUse === "dsv" ? delimiterToUse : null,
             mapping: mappingToUse,
             encoding: encodingToUse,
+            zonaHoraria: zonaToUse,
           },
         });
 
@@ -229,6 +235,7 @@ export default function App() {
             delimiter: delimiterToUse,
             mapping,
             encoding: encodingToUse,
+            zonaHoraria: zonaToUse,
           },
         }));
       } catch (cause) {
@@ -317,6 +324,7 @@ export default function App() {
       setPattern(opciones.pattern);
       setDelimiter(opciones.delimiter);
       setEncoding(opciones.encoding);
+      setZonaHoraria(opciones.zonaHoraria);
       if (cerrarPanel) setPropsOpen(false);
       void (async () => {
         await closeTab(pestaña.id);
@@ -780,6 +788,7 @@ export default function App() {
         pattern={pattern}
         delimiter={delimiter}
         encoding={encoding}
+        zonaHoraria={zonaHoraria}
         columnsEnabled={!busy && !!active && active.session.sample_lines.length > 1}
         busy={busy}
         onClose={() => setPropsOpen(false)}
@@ -790,7 +799,7 @@ export default function App() {
           setMapperOpen(true);
         }}
         onApply={(opciones) => handleApplyOptions(opciones)}
-        onApplyEncoding={(opciones) => handleApplyOptions(opciones, false)}
+        onApplyInmediato={(opciones) => handleApplyOptions(opciones, false)}
       />
 
       <ColumnMapper

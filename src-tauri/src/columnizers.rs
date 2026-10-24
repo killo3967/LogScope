@@ -168,7 +168,9 @@ impl LogParser for ClfParser {
 
         // `10/Oct/2000:13:55:36 -0700`
         if let Ok(datetime) = chrono::DateTime::parse_from_str(group(4), "%d/%b/%Y:%H:%M:%S %z") {
-            parsed.ts_ms = Some(datetime.timestamp_millis());
+            // Hora de pared tal como está escrita: el desfase del `%z` no se
+            // aplica aquí, que para ordenar ya está `EntryTable::instant_at`.
+            parsed.ts_ms = Some(datetime.naive_local().and_utc().timestamp_millis());
         }
 
         push_field(&mut parsed, "Host", group(1));
@@ -436,7 +438,8 @@ impl LogParser for GlassfishParser {
             // `yyyy-MM-ddTHH:mm:ss.fff+0200`
             if let Ok(datetime) = chrono::DateTime::parse_from_str(raw.trim(), "%Y-%m-%dT%H:%M:%S%.f%z")
             {
-                parsed.ts_ms = Some(datetime.timestamp_millis());
+                // Hora de pared: el desfase explícito se usa solo para ordenar.
+                parsed.ts_ms = Some(datetime.naive_local().and_utc().timestamp_millis());
             } else {
                 parsed.ts_ms = parse_timestamp(raw.trim());
             }
@@ -515,14 +518,11 @@ fn websphere_timestamp(raw: &str) -> Option<i64> {
         }
     }
 
+    // Hora de pared, sin desfase: el instante para ordenar lo calcula
+    // `EntryTable::instant_at` con la zona del fichero.
     chrono::NaiveDateTime::parse_from_str(&texto, "%y/%m/%d %H:%M:%S%.f")
         .ok()
-        .map(|naive| {
-            let offset = chrono::Local
-                .offset_from_utc_datetime(&naive)
-                .local_minus_utc() as i64;
-            naive.and_utc().timestamp_millis() + offset * 1000
-        })
+        .map(|naive| naive.and_utc().timestamp_millis())
 }
 
 fn websphere_level(token: &str) -> Option<Level> {

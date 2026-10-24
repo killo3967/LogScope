@@ -56,6 +56,45 @@ fn escribir_json_intercalado(count: usize) -> std::path::PathBuf {
 }
 
 #[test]
+fn dos_zonas_distintas_se_ordenan_por_instante_real() {
+    // La misma hora de pared en dos ficheros: uno escrito en UTC y otro en
+    // UTC+2. Los dígitos son idénticos, así que solo el instante real puede
+    // decidir el orden: el de UTC+2 ocurrió dos horas antes.
+    let contenido = "2026-10-22 10:00:00 INFO misma hora\n";
+
+    let en_utc = fuente_con_zona("zona-utc.log", contenido, Some(0));
+    let en_utc_mas_2 = fuente_con_zona("zona-mas2.log", contenido, Some(120));
+
+    let set = LogSet::new(vec![en_utc, en_utc_mas_2]);
+    assert_eq!(set.len(), 2);
+    assert!(set.is_merged());
+
+    // Mismos dígitos en las dos filas…
+    assert_eq!(set.row(0).hora.as_deref(), Some("10:00:00.000"));
+    assert_eq!(set.row(1).hora.as_deref(), Some("10:00:00.000"));
+    assert_eq!(set.row(0).ts_ms, set.row(1).ts_ms);
+    // …pero primero la de UTC+2, que es el instante más temprano.
+    assert_eq!(set.row(0).source, "zona-mas2.log");
+    assert_eq!(set.row(1).source, "zona-utc.log");
+}
+
+/// Fuente a partir de un texto, escrita en una zona horaria concreta (minutos
+/// respecto de UTC; `None` = la del equipo).
+fn fuente_con_zona(nombre: &str, contenido: &str, zona: Option<i32>) -> Source {
+    let mut path = std::env::temp_dir();
+    path.push(format!("logscope-fusion-{nombre}"));
+    std::fs::write(&path, contenido).expect("escribir log temporal");
+
+    let mut table = EntryTable::new(logscope_lib::parser::BasicParser::new());
+    table.set_zona(zona);
+    table.ingest_bytes(contenido.as_bytes());
+    Source {
+        name: nombre.to_string(),
+        table,
+    }
+}
+
+#[test]
 fn fusiona_dos_formatos_distintos_en_orden_de_instante() {
     let clf = Path::new(CLF);
     if !clf.exists() {
@@ -65,10 +104,16 @@ fn fusiona_dos_formatos_distintos_en_orden_de_instante() {
 
     let json_path = escribir_json_intercalado(300);
 
-    let (Some(a), Some(b)) = (cargar(clf), cargar(&json_path)) else {
+    let (Some(mut a), Some(mut b)) = (cargar(clf), cargar(&json_path)) else {
         eprintln!("omitido: no se pudieron leer las fuentes");
         return;
     };
+
+    // Ahora se guarda la hora de pared, así que para ordenar entre ficheros hay
+    // que decir en qué zona está escrito cada uno: el CLF de muestra escribe
+    // `+0200` y el JSON `Z`. Es justo el ajuste «zona del log».
+    a.table.set_zona(Some(120));
+    b.table.set_zona(Some(0));
 
     // Cada fuente conserva su propio parser: son formatos distintos.
     let parser_a = a.table.parser_name().to_string();
@@ -91,7 +136,10 @@ fn fusiona_dos_formatos_distintos_en_orden_de_instante() {
 
     for index in 0..set.len() {
         let row = set.row(index);
-        let ts = row.ts_ms.expect("todas las fuentes traen instante");
+        row.ts_ms.expect("todas las fuentes traen hora");
+        // Se ordena por instante real, no por la hora de pared: dos ficheros con
+        // los mismos dígitos pueden haber ocurrido en momentos distintos.
+        let ts = set.instant_at(index);
         assert!(
             ts >= anterior,
             "orden roto en la fila {index}: {ts} < {anterior}"

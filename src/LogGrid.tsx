@@ -4,7 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useVirtualizer } from "@tanstack/react-virtual";
 
 import type { Filters, HighlightRule, PageResult, Row } from "./types";
-import { COLUMN_WIDTHS, DEFAULT_COLUMN_WIDTH, formatClock, formatDate } from "./types";
+import { COLUMN_WIDTHS, DEFAULT_COLUMN_WIDTH } from "./types";
 import { MenuFilas } from "./MenuFilas";
 import { mensajeDeError } from "./errores";
 import { t } from "./textos";
@@ -491,8 +491,10 @@ export function LogGrid({
   }
 
   const cellValue = (row: Row, name: string): string => {
-    if (name === "Date") return formatDate(row.ts_ms);
-    if (name === "Time") return formatClock(row.ts_ms);
+    // Los dígitos del fichero tal cual los formateó el núcleo: nada de `new
+    // Date`, que convertiría a la zona del navegador.
+    if (name === "Date") return row.fecha ?? "";
+    if (name === "Time") return row.hora ?? "";
     if (name === "Level") return row.level;
     if (name === "Source") return row.source;
     return row.fields.find((field) => field.name === name)?.value ?? "";

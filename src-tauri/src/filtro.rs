@@ -17,25 +17,26 @@
 //! - [`Comparacion::Regex`] se compila **una sola vez por pasada** y se trata
 //!   sin distinguir mayúsculas. Si la expresión no compila, esa condición
 //!   **no coincide nunca**: la vista se queda vacía pero no se rompe.
-//! - `desde_ms`/`hasta_ms` son inclusivos y se comparan contra el instante de
-//!   la entrada. Si `desde_ms > hasta_ms` no entra nada. Las entradas **sin
-//!   instante** quedan fuera en cuanto hay rango de fechas o franja horaria.
-//! - La franja horaria son minutos del día (0..1439) en **hora local** de la
-//!   máquina. Con `hora_desde < hora_hasta` la ventana es normal (`>=` y
+//! - `desde_ms`/`hasta_ms` son inclusivos y se comparan contra la **hora de
+//!   pared** de la entrada (los dígitos que el usuario ve), no contra el
+//!   instante real de la fuente. Si `desde_ms > hasta_ms` no entra nada. Las
+//!   entradas **sin hora** quedan fuera en cuanto hay rango de fechas o franja
+//!   horaria.
+//! - La franja horaria son minutos del día (0..1439) tomados **de esa misma hora
+//!   de pared**: un log escrito a las 10:00 entra en la franja de las 10:00
+//!   aunque su instante real sea otro, y aunque el fichero venga de otra zona
+//!   horaria. Con `hora_desde < hora_hasta` la ventana es normal (`>=` y
 //!   `<=`); con `hora_desde > hora_hasta` **cruza medianoche** (`>=` o `<=`);
 //!   si son iguales vale el **día completo**. Si solo viene un extremo, la
 //!   ventana queda abierta por el otro lado.
 //! - `fuentes` vacío = todas; con nombres, la entrada debe venir de una de
 //!   esas fuentes.
 //!
-//! Lo caro (regex compiladas, agujas en minúsculas, desfase de zona horaria por
-//! día) se resuelve una vez por pasada en [`FiltroListo`]. El modelo en sí
-//! ([`FiltroAvanzado`]) es `Clone + PartialEq` para que la caché de la vista
-//! combinada siga funcionando sin guardar nada compilado dentro.
+//! Lo caro (regex compiladas, agujas en minúsculas) se resuelve una vez por
+//! pasada en [`FiltroListo`]. El modelo en sí ([`FiltroAvanzado`]) es
+//! `Clone + PartialEq` para que la caché de la vista combinada siga funcionando
+//! sin guardar nada compilado dentro.
 
-use std::collections::HashMap;
-
-use chrono::{Local, TimeZone, Utc};
 use regex::{Regex, RegexBuilder};
 use serde::{Deserialize, Serialize};
 
@@ -110,10 +111,11 @@ pub struct Grupo {
 pub struct FiltroAvanzado {
     /// Grupos unidos entre sí con Y.
     pub grupos: Vec<Grupo>,
-    /// Rango de fechas, ambos extremos inclusive (epoch en ms).
+    /// Rango de fechas, ambos extremos inclusive (epoch en ms de la **hora de
+    /// pared**, es decir, los dígitos que el usuario ve).
     pub desde_ms: Option<i64>,
     pub hasta_ms: Option<i64>,
-    /// Franja horaria en minutos desde medianoche, hora local.
+    /// Franja horaria en minutos desde medianoche, sobre la hora de pared.
     pub hora_desde: Option<u32>,
     pub hora_hasta: Option<u32>,
     /// Nombres de fuente; vacío = todas.
@@ -145,9 +147,9 @@ impl FiltroAvanzado {
         }
     }
 
-    /// ¿Hay que consultar el instante de la entrada? Solo entonces las
-    /// entradas sin instante se descartan.
-    fn usa_instante(&self) -> bool {
+    /// ¿Hay que consultar la hora de la entrada? Solo entonces las entradas
+    /// sin hora se descartan.
+    fn usa_hora(&self) -> bool {
         self.desde_ms.is_some() || self.hasta_ms.is_some() || self.hora_restringe()
     }
 }
@@ -262,10 +264,8 @@ pub struct FiltroListo {
     hora_hasta: Option<u32>,
     /// Nombres de fuente en minúsculas.
     fuentes: Vec<String>,
-    usa_instante: bool,
+    usa_hora: bool,
     restrictivo: bool,
-    /// Desfase local en segundos, cacheado por día (ver `parser.rs`).
-    offsets: HashMap<i64, i32>,
 }
 
 impl FiltroListo {
@@ -291,9 +291,8 @@ impl FiltroListo {
             hora_desde: filtro.hora_desde,
             hora_hasta: filtro.hora_hasta,
             fuentes: filtro.fuentes.iter().map(|f| f.to_lowercase()).collect(),
-            usa_instante: filtro.usa_instante(),
+            usa_hora: filtro.usa_hora(),
             restrictivo: filtro.restringe(),
-            offsets: HashMap::new(),
         })
     }
 
@@ -307,7 +306,7 @@ impl FiltroListo {
     /// filtro avanzado? `fuente` es el nombre del fichero de origen; en una
     /// tabla suelta se pasa `""`.
     ///
-    /// El orden es de barato a caro: fuentes, instante (fechas y franja) y, por
+    /// El orden es de barato a caro: fuentes, hora (fechas y franja) y, por
     /// último, las condiciones, que son las que pueden llegar a mirar el texto
     /// completo de la entrada.
     pub fn coincide(&mut self, tabla: &EntryTable, index: usize, fuente: &str) -> bool {
@@ -322,7 +321,7 @@ impl FiltroListo {
         {
             return false;
         }
-        if self.usa_instante && !self.instante_entra(tabla.ts_at(index)) {
+        if self.usa_hora && !self.hora_entra(tabla.ts_at(index)) {
             return false;
         }
         if self.grupos.is_empty() {
@@ -338,26 +337,27 @@ impl FiltroListo {
         true
     }
 
-    /// Fechas y franja horaria, ambas contra el instante de la entrada. Una
-    /// entrada sin instante no entra nunca en un filtro que use el instante.
-    fn instante_entra(&mut self, ts_ms: i64) -> bool {
-        if ts_ms == NO_TS {
+    /// Fechas y franja horaria, ambas contra la hora de pared de la entrada:
+    /// es lo que el usuario ve en pantalla, así que es con lo que compara. Una
+    /// entrada sin hora no entra nunca en un filtro que use la hora.
+    fn hora_entra(&self, pared_ms: i64) -> bool {
+        if pared_ms == NO_TS {
             return false;
         }
         if let Some(desde) = self.desde_ms {
-            if ts_ms < desde {
+            if pared_ms < desde {
                 return false;
             }
         }
         if let Some(hasta) = self.hasta_ms {
-            if ts_ms > hasta {
+            if pared_ms > hasta {
                 return false;
             }
         }
         if self.hora_desde.is_none() && self.hora_hasta.is_none() {
             return true;
         }
-        let minuto = minuto_local(ts_ms, &mut self.offsets);
+        let minuto = minuto_de_pared(pared_ms);
         entra_en_franja(minuto, self.hora_desde, self.hora_hasta)
     }
 }
@@ -376,34 +376,11 @@ fn entra_en_franja(minuto: u32, desde: Option<u32>, hasta: Option<u32>) -> bool 
     }
 }
 
-/// Minuto del día (0..1439) del instante `ts_ms`, en hora local.
+/// Minuto del día (0..1439) de la hora de pared `pared_ms`.
 ///
-/// El parser construye el instante como hora local más el desfase del día, así
-/// que aquí se deshace esa suma con el mismo desfase, cacheado por día.
-fn minuto_local(ts_ms: i64, offsets: &mut HashMap<i64, i32>) -> u32 {
-    let offset = offset_local(ts_ms, offsets);
-    // El instante guardado es un epoch real: la hora de pared local es la UTC
-    // más el desfase (mismo criterio que `formatClock` en la interfaz).
-    let local_ms = ts_ms + offset as i64 * 1000;
-    (local_ms.div_euclid(60_000)).rem_euclid(1440) as u32
-}
-
-/// Desfase de la zona local en segundos para el día del instante, cacheado.
-/// Igual que en `parser.rs`: un desfase solo cambia con el horario de verano,
-/// así que resolverlo una vez por día es correcto y no cuesta por entrada.
-fn offset_local(ts_ms: i64, offsets: &mut HashMap<i64, i32>) -> i32 {
-    let clave = ts_ms.div_euclid(86_400_000);
-    if let Some(&offset) = offsets.get(&clave) {
-        return offset;
-    }
-    let offset = Utc
-        .timestamp_millis_opt(ts_ms)
-        .single()
-        .map(|dt| dt.naive_utc().date())
-        .and_then(|fecha| fecha.and_hms_opt(12, 0, 0))
-        .and_then(|mediodia| Local.from_local_datetime(&mediodia).single())
-        .map(|dt| dt.offset().local_minus_utc())
-        .unwrap_or(0);
-    offsets.insert(clave, offset);
-    offset
+/// La hora de pared se guarda «como si fuera UTC», así que sus dígitos ya son
+/// los del fichero: basta quedarse con la parte del día, sin desfacer ningún
+/// desfase.
+fn minuto_de_pared(pared_ms: i64) -> u32 {
+    pared_ms.div_euclid(60_000).rem_euclid(1440) as u32
 }

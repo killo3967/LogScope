@@ -40,6 +40,17 @@ fn fuente(nombre: &str, contenido: &str) -> Source {
     }
 }
 
+/// Tabla de un fichero escrito en una zona horaria concreta (minutos respecto
+/// de UTC; `None` = la del equipo). La zona se fija antes de ingerir.
+fn tabla_con_zona(nombre: &str, contenido: &str, zona: Option<i32>) -> EntryTable {
+    let path = escribir(nombre, contenido);
+    let bytes = std::fs::read(&path).expect("leer log temporal");
+    let mut table = EntryTable::new(BasicParser::new());
+    table.set_zona(zona);
+    table.ingest_bytes(&bytes);
+    table
+}
+
 fn filtro(grupos: Vec<Grupo>) -> FiltroAvanzado {
     FiltroAvanzado {
         grupos,
@@ -98,6 +109,16 @@ fn visibles(tabla: &EntryTable, contenido: &str, avanzado: FiltroAvanzado) -> Ve
 
 fn instante(texto: &str) -> i64 {
     parse_timestamp(texto).unwrap_or_else(|| panic!("instante no reconocido: {texto}"))
+}
+
+/// Epoch de una hora de pared escrita, leída «como si fuera UTC». Es lo que ve
+/// el usuario en la columna de fecha y hora, y por tanto lo que debe comparar
+/// el rango de fechas.
+fn pared(texto: &str) -> i64 {
+    chrono::NaiveDateTime::parse_from_str(texto, "%Y-%m-%d %H:%M:%S")
+        .unwrap_or_else(|e| panic!("hora de pared no reconocida ({texto}): {e}"))
+        .and_utc()
+        .timestamp_millis()
 }
 
 /// Minutos desde medianoche, para las franjas horarias.
@@ -226,6 +247,28 @@ fn el_rango_de_fechas_incluye_los_extremos() {
 }
 
 #[test]
+fn el_rango_de_fechas_compara_la_hora_de_pared() {
+    // El rango lo pone el usuario con las horas que ve en pantalla, así que se
+    // compara contra los dígitos del fichero y no contra el instante real (que
+    // en este equipo va una hora por detrás de lo escrito).
+    let tabla = tabla_de("fechas-pared", FECHAS);
+    let filtro = FiltroAvanzado {
+        desde_ms: Some(pared("2026-10-22 10:00:10")),
+        hasta_ms: Some(pared("2026-10-22 10:00:20")),
+        ..Default::default()
+    };
+
+    assert_eq!(
+        visibles(&tabla, FECHAS, filtro),
+        vec![
+            "2026-10-22 10:00:10 INFO diez",
+            "2026-10-22 10:00:20 INFO veinte",
+        ],
+        "el rango debe medirse con la hora escrita, no con el instante"
+    );
+}
+
+#[test]
 fn las_entradas_sin_instante_quedan_fuera_con_rango_de_fechas() {
     const SIN_HORA: &str = "\
 2026-10-22 10:00:00 INFO con hora
@@ -266,6 +309,28 @@ const HORAS: &str = "\
 2026-10-22 15:29:00 INFO hasta
 2026-10-22 15:30:00 INFO despues
 ";
+
+#[test]
+fn la_franja_horaria_compara_la_hora_de_pared() {
+    // Fichero escrito en UTC-5: la franja se mide con los dígitos del fichero
+    // (12:07…15:29), no con el instante real de cada entrada.
+    let tabla = tabla_con_zona("franja-pared", HORAS, Some(-300));
+    let filtro = FiltroAvanzado {
+        hora_desde: Some(minuto(12, 7)),
+        hora_hasta: Some(minuto(15, 29)),
+        ..Default::default()
+    };
+
+    assert_eq!(
+        visibles(&tabla, HORAS, filtro),
+        vec![
+            "2026-10-22 12:07:00 INFO desde",
+            "2026-10-22 13:00:00 INFO en medio",
+            "2026-10-22 15:29:00 INFO hasta",
+        ],
+        "la franja compara la hora escrita, no el instante"
+    );
+}
 
 #[test]
 fn franja_horaria_normal() {

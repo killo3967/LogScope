@@ -27,7 +27,25 @@ export interface OpcionesApertura {
   pattern: string;
   delimiter: string;
   encoding: EncodingKind;
+  /** Minutos respecto de UTC; `null` = zona del equipo. */
+  zonaHoraria: number | null;
 }
+
+/**
+ * Zonas que se ofrecen: la del equipo y desplazamientos fijos. Los nombres de
+ * zona con horario de verano necesitarían una dependencia más; un log de
+ * servidor suele ir en UTC o en un desfase fijo.
+ */
+export const ZONAS: { valor: number | null; etiqueta: string }[] = [
+  { valor: -480, etiqueta: "UTC−08:00" },
+  { valor: -300, etiqueta: "UTC−05:00" },
+  { valor: -180, etiqueta: "UTC−03:00" },
+  { valor: 0, etiqueta: "UTC" },
+  { valor: 60, etiqueta: "UTC+01:00" },
+  { valor: 120, etiqueta: "UTC+02:00" },
+  { valor: 330, etiqueta: "UTC+05:30" },
+  { valor: 480, etiqueta: "UTC+08:00" },
+];
 
 interface Props {
   open: boolean;
@@ -43,13 +61,14 @@ interface Props {
   pattern: string;
   delimiter: string;
   encoding: EncodingKind;
+  zonaHoraria: number | null;
   columnsEnabled: boolean;
   busy: boolean;
   onClose: () => void;
   onColumns: () => void;
   onApply: (opciones: OpcionesApertura) => void;
-  /** Cambiar la codificación recarga al momento, sin cerrar el panel. */
-  onApplyEncoding: (opciones: OpcionesApertura) => void;
+  /** Cambiar codificación o zona recarga al momento, sin cerrar el panel. */
+  onApplyInmediato: (opciones: OpcionesApertura) => void;
 }
 
 /**
@@ -69,17 +88,19 @@ export function Propiedades({
   pattern,
   delimiter,
   encoding,
+  zonaHoraria,
   columnsEnabled,
   busy,
   onClose,
   onColumns,
   onApply,
-  onApplyEncoding,
+  onApplyInmediato,
 }: Props) {
   const [parserDraft, setParserDraft] = useState<ParserKind>(parser);
   const [patternDraft, setPatternDraft] = useState(pattern);
   const [delimiterDraft, setDelimiterDraft] = useState(delimiter);
   const [encodingDraft, setEncodingDraft] = useState<EncodingKind>(encoding);
+  const [zonaDraft, setZonaDraft] = useState<number | null>(zonaHoraria);
 
   // Cada apertura parte de las opciones vigentes; los cambios a medias no se
   // arrastran a la siguiente vez que se abre el panel.
@@ -193,11 +214,12 @@ export function Propiedades({
                 onChange={(event) => {
                   const siguiente = event.target.value as EncodingKind;
                   setEncodingDraft(siguiente);
-                  onApplyEncoding({
+                  onApplyInmediato({
                     parser: parserDraft,
                     pattern: patternDraft,
                     delimiter: delimiterDraft,
                     encoding: siguiente,
+                    zonaHoraria: zonaDraft,
                   });
                 }}
                 title={t("props.codificacionTooltip")}
@@ -205,6 +227,37 @@ export function Propiedades({
                 {ENCODINGS.map((option) => (
                   <option key={option} value={option}>
                     {t(`props.encoding.${option}`)}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="props-field">
+              <span className="props-label">{t("props.zona")}</span>
+              <select
+                value={zonaDraft === null ? "equipo" : String(zonaDraft)}
+                onChange={(event) => {
+                  const valor =
+                    event.target.value === "equipo"
+                      ? null
+                      : Number(event.target.value);
+                  setZonaDraft(valor);
+                  // Afecta al orden y a los filtros por fecha, así que se aplica
+                  // al momento, igual que la codificación.
+                  onApplyInmediato({
+                    parser: parserDraft,
+                    pattern: patternDraft,
+                    delimiter: delimiterDraft,
+                    encoding: encodingDraft,
+                    zonaHoraria: valor,
+                  });
+                }}
+                title={t("props.zonaTooltip")}
+              >
+                <option value="equipo">{t("props.zonaEquipo")}</option>
+                {ZONAS.map((zona) => (
+                  <option key={zona.etiqueta} value={String(zona.valor)}>
+                    {zona.etiqueta}
                   </option>
                 ))}
               </select>
@@ -231,6 +284,7 @@ export function Propiedades({
                 pattern: patternDraft,
                 delimiter: delimiterDraft,
                 encoding: encodingDraft,
+                zonaHoraria: zonaDraft,
               })
             }
           >

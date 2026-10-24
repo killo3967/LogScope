@@ -13,12 +13,16 @@ Mientras la versión mayor sea `0`, la parte menor puede romper compatibilidad:
 
 - Las columnas **Date** y **Time** mostraban la hora desplazada el doble del
   desfase horario: un log escrito a las 08:19 se veía a las 12:19 en un equipo en
-  horario de verano. El instante se guardaba sumando el desfase local en vez de
-  restarlo. También afecta al filtro por franja horaria, que ahora coincide con lo
-  que se ve en pantalla y con lo que dice el fichero.
+  horario de verano. Ahora la rejilla pinta **los dígitos del fichero**, sin
+  conversión de zona: lo que se lee es lo que hay escrito.
 
 ### Añadido
 
+- **Zona horaria del log** en Propiedades: la del equipo (por defecto) o un
+  desfase fijo (UTC, UTC−08:00, UTC+02:00…). No cambia lo que se ve —la rejilla
+  sigue mostrando los dígitos del fichero— sino el instante real de cada entrada,
+  que es lo que ordena la vista combinada de ficheros de zonas distintas y lo que
+  usan los filtros por fecha. Se guarda en la receta y se aplica al momento.
 - **Selección múltiple de líneas** en el grid (Mayús+clic para un rango, Ctrl+clic
   para sumar o quitar) y **copia al portapapeles** con o sin número de línea,
   desde el menú contextual de la selección o con Ctrl+C. La copia pide al núcleo

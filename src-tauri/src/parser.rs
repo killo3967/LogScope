@@ -12,6 +12,9 @@ pub const NO_TS: i64 = i64::MIN;
 
 #[derive(Debug, Clone, Default)]
 pub struct ParsedLine {
+    /// Hora de pared del fichero, en milisegundos y expresada «como si fuera
+    /// UTC»: los dígitos escritos, sin desfase de zona. Para ordenar y para
+    /// mezclar fuentes hace falta el instante real (`EntryTable::instant_at`).
     pub ts_ms: Option<i64>,
     pub level: Level,
     pub fields: Vec<(String, String)>,
@@ -54,8 +57,9 @@ const OTHER_FORMATS: &[&str] = &[
 ///
 /// Consultar la zona horaria en cada línea cuesta más que parsear la fecha,
 /// así que se resuelve una vez por fecha: correcto también cuando el log
-/// cruza un cambio de hora, y sin el coste por línea.
-fn local_offset_seconds(date: NaiveDate) -> i32 {
+/// cruza un cambio de hora, y sin el coste por línea. Lo comparte
+/// `EntryTable::instant_at`, que es donde se pasa de hora de pared a instante.
+pub(crate) fn local_offset_seconds(date: NaiveDate) -> i32 {
     use chrono::TimeZone;
 
     static CACHE: OnceLock<Mutex<HashMap<i64, i32>>> = OnceLock::new();
@@ -80,12 +84,18 @@ fn local_offset_seconds(date: NaiveDate) -> i32 {
     offset
 }
 
+/// Hora de pared del log expresada «como si fuera UTC».
+///
+/// **No es un instante real**: son los dígitos que el fichero trae escritos,
+/// interpretados como UTC para poder guardarlos en un `i64`. El visor tiene que
+/// enseñar siempre lo escrito, así que el valor guardado no puede llevar ningún
+/// desfase aplicado. Restarle aquí el desfase del equipo era justo lo que hacía
+/// que las horas salieran desplazadas.
+///
+/// El instante real se calcula después, con la zona horaria del fichero, en
+/// `EntryTable::instant_at`.
 fn to_ms(naive: NaiveDateTime) -> Option<i64> {
-    // `naive` es la hora de pared del log, en hora local: el instante real es
-    // esa hora interpretada como UTC MENOS el desfase local. Sumándolo, el visor
-    // mostraba las horas desplazadas el doble del desfase (4 h en verano).
-    let offset = local_offset_seconds(naive.date()) as i64;
-    Some(naive.and_utc().timestamp_millis() - offset * 1000)
+    Some(naive.and_utc().timestamp_millis())
 }
 
 /// Reconoce un instante al principio de la línea en los formatos más comunes.
@@ -115,7 +125,9 @@ pub fn parse_timestamp(raw: &str) -> Option<i64> {
     }
     if s.len() >= 20 && s.as_bytes()[10] == b'T' {
         if let Ok(dt) = DateTime::parse_from_rfc3339(s) {
-            return Some(dt.timestamp_millis());
+            // Un desfase explícito (`+02:00`) no cambia lo escrito: se guarda
+            // la parte de pared (`dt.naive_local()`), no el instante.
+            return to_ms(dt.naive_local());
         }
     }
     for fmt in OTHER_FORMATS {
@@ -130,7 +142,9 @@ pub fn parse_timestamp(raw: &str) -> Option<i64> {
             return to_ms(today.and_time(time));
         }
     }
-    // epoch: 10 dígitos = segundos, 13 = milisegundos
+    // epoch: 10 dígitos = segundos, 13 = milisegundos. Un epoch ya es un
+    // instante, y sus dígitos son los mismos que los de su hora UTC, así que
+    // encaja sin cambios con la hora de pared.
     if (s.len() == 10 || s.len() == 13) && s.bytes().all(|b| b.is_ascii_digit()) {
         if let Ok(v) = s.parse::<i64>() {
             return if s.len() == 10 { Some(v * 1000) } else { Some(v) };
@@ -1116,6 +1130,47 @@ fn classify(line: &str, parsed: &mut ParsedLine) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Epoch de una hora de pared leída «como si fuera UTC»: los dígitos del
+    /// fichero, sin desfase de zona.
+    fn pared_ms(date: (i32, u32, u32), ms: u32) -> i64 {
+        NaiveDate::from_ymd_opt(date.0, date.1, date.2)
+            .unwrap()
+            .and_hms_milli_opt(ms / 3_600_000, (ms / 60_000) % 60, (ms / 1000) % 60, ms % 1000)
+            .unwrap()
+            .and_utc()
+            .timestamp_millis()
+    }
+
+    #[test]
+    fn hora_de_pared_conserva_los_digitos_escritos() {
+        // `2026-10-22 08:19:59,826` tiene que dar exactamente el epoch de
+        // `2026-10-22T08:19:59.826Z`: ni un segundo de desfase del equipo.
+        let esperado = pared_ms((2026, 10, 22), 8 * 3_600_000 + 19 * 60_000 + 59_826);
+        assert_eq!(
+            parse_timestamp("2026-10-22 08:19:59,826"),
+            Some(esperado),
+            "la hora de pared no se reformatea por zona horaria"
+        );
+        assert_eq!(
+            parse_timestamp("2026-10-22T08:19:59.826"),
+            Some(esperado),
+            "la variante ISO da los mismos dígitos"
+        );
+    }
+
+    #[test]
+    fn rfc3339_con_desfase_conserva_la_hora_escrita() {
+        // Escrito con `+02:00`: se guarda lo que hay escrito (08:19:59.826),
+        // no el instante al que equivale (06:19:59.826Z).
+        let escrito = parse_timestamp("2026-10-22T08:19:59.826+02:00");
+        let sin_desfase = parse_timestamp("2026-10-22T08:19:59.826Z");
+        assert_eq!(escrito, sin_desfase);
+        assert_eq!(
+            escrito,
+            Some(pared_ms((2026, 10, 22), 8 * 3_600_000 + 19 * 60_000 + 59_826))
+        );
+    }
 
     #[test]
     fn reconoce_instante_iso() {

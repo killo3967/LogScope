@@ -355,19 +355,13 @@ de tocar el código del tail (fase 5), para saber qué funcionaba.
 
 Lo último de la cola: no urgente, pero conviene no olvidarlo.
 
-- [ ] **Corrección de zona horaria y desplazamiento de horas a petición**. Hoy la
-      hora de cada fichero se interpreta en la zona del equipo, así que un log
-      escrito en otra zona (un servidor en UTC, por ejemplo) se muestra desplazado
-      **sin avisar**. Se decidió dejarlo así por ahora. Las opciones, por orden de
-      utilidad:
-      - Guardar además la **hora de pared tal y como viene escrita** y pintar
-        siempre los dígitos del fichero, sin reformatear; el instante seguiría
-        usándose por dentro para ordenar, para el Delta Time y para los filtros.
-        Es lo más fiel para un visor de logs.
-      - **Zona horaria por fichero** en Propiedades, guardada en la receta, con la
-        del equipo como valor por defecto.
-      - **Desplazar todas las horas del log** un desfase elegido por el usuario
-        (positivo o negativo), para cuadrar un fichero con otra fuente o con la
-        hora actual. El desplazamiento afectaría a lo que se muestra y a lo que se
-        compara, y tendría que verse de forma inequívoca en la interfaz y quedar
-        guardado en la receta.
+- [ ] **Desplazar todas las horas del log** un desfase elegido por el usuario
+      (positivo o negativo), para cuadrar un fichero con otra fuente o con la hora
+      actual. Sería un ajuste por fichero más, junto a la zona horaria, y tendría
+      que verse de forma inequívoca en la interfaz y quedar en la receta.
+- [ ] **Zonas horarias con nombre** (`Europe/Madrid`, con horario de verano) en vez
+      de solo desfases fijos: hace falta una dependencia con la base de zonas
+      (por ejemplo `chrono-tz`), así que hay que autorizarla.
+- [ ] **Avisar cuando el log parece de otra zona**: si el fichero lo dice (CLF con
+      `+0200`, RFC 3339 con `Z`) se podría proponer la zona en lugar de que el
+      usuario la elija a mano.

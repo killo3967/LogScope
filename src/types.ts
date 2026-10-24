@@ -17,7 +17,12 @@ export interface Field {
 export interface Row {
   index: number;
   line_no: number;
+  /** Hora de pared del fichero (no es un instante): solo para ordenar y comparar. */
   ts_ms: number | null;
+  /** Los dígitos del fichero, ya formateados: `2026-10-22`. */
+  fecha: string | null;
+  /** Los dígitos del fichero, ya formateados: `08:19:59.826`. */
+  hora: string | null;
   level: Level;
   raw: string;
   fields: Field[];
@@ -187,6 +192,10 @@ export const LEVEL_BIT: Record<Level, number> = {
 
 export const ALL_LEVELS = 127;
 
+/**
+ * Fecha de un **instante** en la zona del navegador. El grid ya no la usa: pinta
+ * `Row.fecha`, que son los dígitos del fichero. Se conserva para otras vistas.
+ */
 export function formatDate(ts: number | null): string {
   if (ts === null) return "";
   const d = new Date(ts);
@@ -194,6 +203,7 @@ export function formatDate(ts: number | null): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+/** Hora de un **instante**; el grid pinta `Row.hora`. Ver `formatDate`. */
 export function formatClock(ts: number | null): string {
   if (ts === null) return "";
   const d = new Date(ts);
@@ -224,6 +234,8 @@ export function formatBytes(n: number): string {
 export interface LastOpen {
   paths: string[];
   parser: ParserKind;
+  /** Minutos de desplazamiento respecto de UTC; `null` o ausente = zona del equipo. */
+  zonaHoraria?: number | null;
   pattern: string;
   delimiter: string;
   mapping: string[] | null;

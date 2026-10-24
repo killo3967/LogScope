@@ -17,6 +17,9 @@ deja seguir un log en vivo mientras se escribe.
 - **Lee la codificación real del fichero.** UTF-8, UTF-16, UTF-32, las páginas
   de Windows y las de consola, y lo deduce cuando no hay pistas.
 - **Filtra por nivel y por texto**, con los niveles a un clic.
+- **Respeta la hora escrita**: las columnas de fecha y hora enseñan los dígitos
+  del fichero, y si el log viene de otra zona horaria se indica en **Propiedades**
+  para que el orden y los filtros por fecha usen el instante correcto.
 - **Colorea** filas o palabras con reglas propias de cada log.
 - **Sigue el fichero en vivo** con autoscroll, y avisa al rotar o truncarse.
 - **Pestañas y vista combinada**: varios logs abiertos a la vez, o

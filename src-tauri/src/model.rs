@@ -66,7 +66,14 @@ pub struct Field {
 pub struct Row {
     pub index: u32,
     pub line_no: u32,
+    /// Hora de pared de la entrada, expresada «como si fuera UTC»: los dígitos
+    /// del fichero. **No es un instante real**; el instante sale de
+    /// `EntryTable::instant_at`, ya con la zona horaria de la fuente.
     pub ts_ms: Option<i64>,
+    /// Fecha ya formateada (`%Y-%m-%d`) desde la hora de pared.
+    pub fecha: Option<String>,
+    /// Hora ya formateada (`%H:%M:%S%.3f`) desde la hora de pared.
+    pub hora: Option<String>,
     pub level: Level,
     pub raw: String,
     pub fields: Vec<Field>,

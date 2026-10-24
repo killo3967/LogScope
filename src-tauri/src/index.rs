@@ -1,12 +1,13 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 
+use chrono::{DateTime, NaiveDate};
 use serde::Deserialize;
 
 use crate::encoding::{tiene_multibyte_valido, Decoder as TextDecoder, Encoding as TextEncoding};
 use crate::filtro::{FiltroAvanzado, FiltroListo};
 use crate::model::{Field, Level, Row};
-use crate::parser::{LogParser, NO_TS};
+use crate::parser::{local_offset_seconds, LogParser, NO_TS};
 
 /// Tope de líneas por entrada: un log sin instantes no debe acabar siendo una
 /// única entrada de un millón de líneas.
@@ -16,12 +17,18 @@ pub struct EntryTable {
     arena: Vec<u8>,
     starts: Vec<u32>,
     lens: Vec<u32>,
+    /// Hora de pared de cada entrada, expresada «como si fuera UTC»: los
+    /// dígitos que trae el fichero, sin desfase de zona. **No es un instante
+    /// real**: para eso está [`EntryTable::instant_at`], que aplica [`Self::zona`].
     ts: Vec<i64>,
     level: Vec<u8>,
     line_nos: Vec<u32>,
     pending: Vec<u8>,
     consumed: u64,
     parser: Arc<dyn LogParser>,
+    /// Zona horaria del fichero, en minutos de desplazamiento respecto de UTC.
+    /// `None` = la del equipo. Se fija antes de ingerir.
+    zona: Option<i32>,
     /// Líneas físicas leídas, para numerar el inicio de cada entrada.
     lines_seen: u32,
     /// Líneas que lleva la entrada en construcción.
@@ -116,6 +123,7 @@ impl EntryTable {
             pending: Vec::new(),
             consumed: 0,
             parser,
+            zona: None,
             lines_seen: 0,
             last_entry_lines: 0,
             decoder: TextDecoder::passthrough(),
@@ -172,6 +180,34 @@ impl EntryTable {
 
     pub fn ts_at(&self, index: usize) -> i64 {
         self.ts[index]
+    }
+
+    /// Fija la zona horaria del fichero: minutos de desplazamiento respecto de
+    /// UTC (`Some(120)` = UTC+2). `None` deja la zona del equipo. Se llama
+    /// antes de ingerir; el valor no depende de las entradas ya leídas.
+    pub fn set_zona(&mut self, zona: Option<i32>) {
+        self.zona = zona;
+    }
+
+    /// Zona horaria con la que se interpretan las horas de pared del fichero.
+    pub fn zona(&self) -> Option<i32> {
+        self.zona
+    }
+
+    /// Instante real de la entrada `index`: la hora de pared menos el desfase de
+    /// la zona del fichero. Es lo que sirve para ordenar y para mezclar fuentes
+    /// escritas en zonas distintas. `NO_TS` si la entrada no trae hora.
+    pub fn instant_at(&self, index: usize) -> i64 {
+        let pared = self.ts[index];
+        if pared == NO_TS {
+            return NO_TS;
+        }
+        match self.zona {
+            Some(minutos) => pared - minutos as i64 * 60_000,
+            // Sin zona propia, la del equipo: se resuelve por día, que es lo
+            // correcto aunque el log cruce un cambio de hora.
+            None => pared - local_offset_seconds(fecha_de_pared(pared)) as i64 * 1000,
+        }
     }
 
     fn push_line(&mut self, text: &str) {
@@ -385,11 +421,14 @@ impl EntryTable {
     pub fn row(&self, index: usize) -> Row {
         let raw = self.raw_of(index);
         let parsed = self.parser.parse(&raw);
-        let ts = self.ts[index];
+        let pared = self.ts[index];
+        let (fecha, hora) = columnas_de_pared(pared);
         Row {
             index: index as u32,
             line_no: self.line_nos[index],
-            ts_ms: if ts == NO_TS { None } else { Some(ts) },
+            ts_ms: if pared == NO_TS { None } else { Some(pared) },
+            fecha,
+            hora,
             level: Level::from_u8(self.level[index]),
             fields: parsed
                 .fields
@@ -414,6 +453,31 @@ impl EntryTable {
     }
 }
 
+// ------------------------------------------------------------- hora de pared
+
+/// Fecha de una hora de pared (guardada «como si fuera UTC»).
+fn fecha_de_pared(pared_ms: i64) -> NaiveDate {
+    DateTime::from_timestamp_millis(pared_ms)
+        .map(|dt| dt.naive_utc().date())
+        .unwrap_or_default()
+}
+
+/// Fecha y hora tal y como están escritas en el fichero, formateadas desde la
+/// hora de pared como si fuera UTC: ni se reformatean a la zona del equipo ni
+/// a la del fichero, para que se vean los mismos dígitos que hay en el log.
+fn columnas_de_pared(pared_ms: i64) -> (Option<String>, Option<String>) {
+    if pared_ms == NO_TS {
+        return (None, None);
+    }
+    match DateTime::from_timestamp_millis(pared_ms) {
+        Some(dt) => (
+            Some(dt.format("%Y-%m-%d").to_string()),
+            Some(dt.format("%H:%M:%S%.3f").to_string()),
+        ),
+        None => (None, None),
+    }
+}
+
 // ---------------------------------------------------------------- LogSet
 
 /// Una fuente del conjunto: un fichero con su propio parser ya detectado.
@@ -424,7 +488,8 @@ pub struct Source {
 
 /// Conjunto de uno o varios ficheros. Con una sola fuente se comporta como la
 /// tabla suelta (orden de lectura). Con varias, las entradas se ordenan por
-/// instante, y las que no tienen instante quedan al final.
+/// **instante real** (hora de pared con la zona de cada fuente), y las que no
+/// tienen hora quedan al final.
 pub struct LogSet {
     pub sources: Vec<Source>,
     /// (instante, índice de fuente, índice de entrada)
@@ -444,7 +509,7 @@ impl LogSet {
             for (source_index, source) in sources.iter().enumerate() {
                 for entry in 0..source.table.len() {
                     order.push((
-                        source.table.ts_at(entry),
+                        source.table.instant_at(entry),
                         source_index as u32,
                         entry as u32,
                     ));
@@ -492,6 +557,20 @@ impl LogSet {
 
     pub fn source_names(&self) -> Vec<String> {
         self.sources.iter().map(|source| source.name.clone()).collect()
+    }
+
+    /// Instante real de la fila visible `index`, con la zona de su fuente.
+    ///
+    /// `Row::ts_ms` es la hora de pared (los dígitos del fichero); esto es lo que
+    /// sirve para ordenar, para el Delta Time y para comparar fuentes.
+    pub fn instant_at(&self, index: usize) -> i64 {
+        match self.order.get(index) {
+            Some(&(_, origen, entrada)) => match self.sources.get(origen as usize) {
+                Some(source) => source.table.instant_at(entrada as usize),
+                None => NO_TS,
+            },
+            None => NO_TS,
+        }
     }
 
     pub fn consumed(&self) -> u64 {
@@ -712,6 +791,71 @@ mod tests {
     fn basic_sigue_agrupando_una_linea_por_entrada() {
         let t = table();
         assert_eq!(t.len(), 2);
+    }
+
+    #[test]
+    fn las_columnas_llevan_los_digitos_del_fichero() {
+        let mut t = EntryTable::new(BasicParser::new());
+        t.ingest_bytes(b"2026-10-22 08:19:59,826 INFO arranque\n");
+
+        let row = t.row(0);
+        assert_eq!(row.fecha.as_deref(), Some("2026-10-22"));
+        assert_eq!(
+            row.hora.as_deref(),
+            Some("08:19:59.826"),
+            "la hora de la columna es la escrita, con milisegundos"
+        );
+        // `ts_ms` se queda como estaba para no romper la interfaz actual, pero
+        // ahora guarda la hora de pared, no un instante real.
+        assert_eq!(row.ts_ms, Some(t.ts_at(0)));
+    }
+
+    #[test]
+    fn sin_hora_no_hay_columnas_de_fecha_ni_hora() {
+        let mut t = EntryTable::new(BasicParser::new());
+        t.ingest_bytes(b"linea suelta sin instante\n");
+
+        let row = t.row(0);
+        assert_eq!(row.ts_ms, None);
+        assert_eq!(row.fecha, None);
+        assert_eq!(row.hora, None);
+    }
+
+    #[test]
+    fn instant_at_aplica_la_zona_del_fichero() {
+        let mut t = EntryTable::new(BasicParser::new());
+        t.ingest_bytes(b"2026-10-22 10:00:00 INFO uno\n");
+        let pared = t.ts_at(0);
+
+        // UTC: el instante real coincide con los dígitos escritos.
+        t.set_zona(Some(0));
+        assert_eq!(t.instant_at(0), pared);
+
+        // UTC+2 (120 minutos): lo escrito son dos horas de reloj más.
+        t.set_zona(Some(120));
+        assert_eq!(t.instant_at(0), pared - 2 * 3_600_000);
+
+        // Sin zona propia manda la del equipo, resuelta por día.
+        t.set_zona(None);
+        let desfase = crate::parser::local_offset_seconds(
+            chrono::NaiveDate::from_ymd_opt(2026, 10, 22).unwrap(),
+        ) as i64;
+        assert_eq!(t.instant_at(0), pared - desfase * 1000);
+        if desfase != 0 {
+            assert_ne!(
+                t.instant_at(0),
+                pared,
+                "la zona del equipo no es UTC: los dos valores difieren en su desfase"
+            );
+        }
+    }
+
+    #[test]
+    fn instant_at_sin_hora_no_tiene_instante() {
+        let mut t = EntryTable::new(BasicParser::new());
+        t.ingest_bytes(b"linea suelta sin instante\n");
+        t.set_zona(Some(120));
+        assert_eq!(t.instant_at(0), NO_TS);
     }
 
     #[test]
