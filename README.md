@@ -192,6 +192,11 @@ El engranaje de la barra abre los ajustes:
 - La arena de líneas evita un `String` por campo: ~20 B de sobrecoste por línea.
 - No hay instalador todavía: se distribuye un único `LogScope.exe`.
 
+## Licencia
+
+MIT: puedes usarlo, modificarlo y redistribuirlo conservando el aviso de autoría.
+El texto completo está en [LICENSE](LICENSE).
+
 ## Para desarrolladores
 
 Si vas a compilarlo o a tocar el código, los requisitos, los comandos y las

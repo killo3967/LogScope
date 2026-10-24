@@ -9,6 +9,11 @@ Mientras la versión mayor sea `0`, la parte menor puede romper compatibilidad:
 
 ## [Unreleased]
 
+### Añadido
+
+- Licencia **MIT** (`LICENSE`) y sección de licencia en el README: hasta ahora el
+  código se publicaba sin condiciones de uso.
+
 ## [0.2.1] - 2026-10-24
 
 ### Cambiado

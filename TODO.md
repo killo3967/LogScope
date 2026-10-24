@@ -207,10 +207,6 @@ persistencia va al final, cuando ya exista todo lo que hay que recordar.
       después `requirements.md`, `SPEC.md` y `AGENTS.md`. El `CHANGELOG.md` se
       queda en un solo idioma: traducir el histórico duplica mantenimiento y no
       aporta.
-- [ ] **Licencia**. El repositorio no tiene `LICENSE`, así que legalmente nadie
-      puede reutilizar el código ni saber bajo qué condiciones está. Elegir una
-      (MIT o Apache-2.0 si se quiere protección de patentes) y enlazarla desde el
-      README.
 - [ ] **Ficha del repositorio en GitHub**: descripción corta, temas
       (`log-viewer`, `windows`, `rust`, `tauri`, `i18n`…), captura en las notas de
       la release y un texto de presentación en inglés.
