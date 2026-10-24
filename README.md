@@ -25,6 +25,12 @@ npm run build        # tsc --noEmit + vite build
 npm run tauri dev    # ventana de desarrollo con recarga en caliente
 ```
 
+Un log se puede abrir de tres formas: escribiendo su ruta y pulsando
+**Abrir**, con **Examinar…** para recorrer el árbol de directorios, o
+arrastrándolo desde el explorador de Windows y soltándolo sobre la ventana.
+Al soltar varios ficheros se abre uno por pestaña, en el orden en que se
+soltaron.
+
 ## Parsers
 
 `auto` es el predeterminado y detecta el formato al abrir. Formatos reales
@@ -39,6 +45,7 @@ verificados contra los logs de esta máquina:
 | opencode / estructurado | `timestamp=… level=INFO run=x message="…"` | `logfmt` |
 | Delimitado (pipe, CSV) | `ts \| INFO \| logger \| hilo \| msg` | `dsv` |
 | Sin instantes (texto, YAML) | `---` / `events:` | `auto` (una línea por entrada) |
+| UTF-16LE con BOM (eMule, .NET) | `24/10/2026 10:55:36: Stopping Kademlia` | `auto` |
 
 También se pueden forzar a mano:
 
@@ -59,6 +66,30 @@ También se pueden forzar a mano:
 Si la detección no acierta, el botón **Columnas…** permite reasignar cada línea
 del registro a su columna (`time`, `level`, `thread`, `tag`, `logger`,
 `message`, `ignore`).
+
+En un formato de una sola línea, `auto` separa la columna **Logger** cuando el
+logger viene como `Logger - mensaje` justo detrás del nivel, que es lo habitual
+en log4net y NLog:
+
+```
+2026-10-22 08:00:03,103 [12] WARN App.Servicio.Pedidos - reintento
+                                       └── Logger ──┘   └─ Message ─┘
+```
+
+Sin nivel delante no hay cabecera que separar, así que un ` - ` en el texto se
+queda dentro del mensaje (`2026-10-15 10:00:00 hola - adios`).
+
+La codificación se detecta en tres pasos: **BOM** (UTF-8/16/32, con UTF-32 antes
+que UTF-16 porque comparten prefijo), **patrón de ceros** para UTF-16 y UTF-32
+sin BOM, y **análisis de frecuencias** con `chardetng` (el detector de Mozilla)
+cuando la cabecera no es UTF-8 limpio; ahí se resuelve el cirílico en CP1251 o
+KOI8-R, el Shift-JIS, GBK, Big5, griego o hebreo. El detector no se consulta si
+el texto ya es UTF-8 razonablemente válido, para no reinterpretar de más.
+En la segunda fila de la barra, **Codificación** permite forzarla: `auto`,
+UTF-8, UTF-16 y UTF-32 LE/BE, Windows-1252/1250/1251, CP850 y CP437 (consola),
+ISO-8859-15, KOI8-R, Shift-JIS, GBK, Big5 y EUC-JP. Hace falta porque las
+páginas de un solo byte comparten los mismos bytes con significados distintos y
+ningún detector puede acertar siempre. Al lado, **Formato** elige el parser.
 
 Ejemplo de patrón para formato log4net:
 

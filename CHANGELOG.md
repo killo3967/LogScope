@@ -9,6 +9,47 @@ Mientras la versión mayor sea `0`, la parte menor puede romper compatibilidad:
 
 ## [Unreleased]
 
+### Añadido
+
+- **Detección estadística de codificación** (`chardetng`, el detector de
+  Mozilla) como tercera capa, después del BOM y del patrón de ceros: resuelve
+  cirílico en CP1251/KOI8-R, Shift-JIS, GBK, Big5, griego o hebreo cuando la
+  cabecera no es UTF-8 limpio. No se consulta si el texto ya es UTF-8 válido o
+  casi válido, para no reinterpretar ficheros que estaban bien.
+- **Selector de codificación** en la barra (segunda fila, junto a **Formato**):
+  `auto` más UTF-8, UTF-16 y UTF-32 en ambos órdenes de bytes, Windows-1252/
+  1250/1251, CP850 y CP437 (páginas OEM de consola), ISO-8859-15, KOI8-R,
+  Shift-JIS, GBK, Big5 y EUC-JP. Se guarda en la receta, así que al reabrir se
+  usa la misma, y cambiarla con un log abierto lo **recarga** con la nueva
+  codificación. La detectada se muestra en el título del selector.
+- Soporte de **UTF-32** (LE y BE): el BOM de UTF-32LE empieza igual que el de
+  UTF-16LE, así que ahora UTF-32 se comprueba primero y se decodifica.
+- Se detecta la codificación del fichero: los logs **UTF-16LE/BE** (eMule,
+  aplicaciones .NET, exportaciones de eventos) se leen bien. Antes se veían
+  con un espacio entre cada letra (`2 4 / 1 0 / 2 0 2 6`) y no se reconocía ni
+  la fecha. También vale para el tail y la vista previa al combinar.
+- Arrastrar uno o varios ficheros de log desde el explorador de Windows sobre
+  la ventana los abre, uno por pestaña, con un aviso mientras se arrastran.
+- Reglas de color: casilla **Aa** por regla para exigir que coincidan las
+  mayúsculas y minúsculas. Desmarcada, el comportamiento es el de siempre.
+- Parser `auto`: separa la columna **Logger** en los formatos de una línea con
+  `… NIVEL Logger - mensaje` (log4net y NLog), que hasta ahora dejaban el
+  logger al principio del mensaje.
+
+### Cambiado
+
+- Una línea UTF-8 con un byte corrupto ya no se reinterpreta entera como
+  Windows-1252 (aparecía «sesiÃ³n»): si hay texto multibyte válido se sustituye
+  solo el byte malo.
+- La barra de herramientas se reparte en dos filas: **Formato** y
+  **Codificación** pasan a la derecha de la segunda, junto al filtro y los
+  niveles, para despejar la primera (ruta, Examinar, Abrir, Columnas, Reglas).
+- Una expresión regular que no compila se marca en rojo en el panel de reglas,
+  con el motivo debajo, en lugar de descartarse en silencio.
+- El panel de reglas de color es una ventana flotante con barra de título: se
+  arrastra para apartarla de las filas que estás coloreando y ya no oscurece el
+  log con un fondo, así que se ve el efecto mientras se ajustan los patrones.
+
 ## [0.1.0] - 2026-10-23
 
 Primera versión. Cubre el núcleo del visor: abrir ficheros, parsearlos,
