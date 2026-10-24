@@ -43,17 +43,18 @@ Peticiones del dueño del proyecto, en el orden en que conviene atacarlas.
       la ventana de reglas abierta; `F12` en WebView2 abre las herramientas de
       desarrollo si están habilitadas, así que hay que reservarlo o desactivarlas;
       la pantalla completa necesita una salida clara (`Esc`) y no confundirse con
-      el F11 del sistema.
+      el F11 del sistema. **El diseño se discute con el usuario cuando se vaya a
+      implementar**, no antes.
 - [ ] **Configuración de atajos**: sección nueva en Ajustes para reasignarlos,
       con validación (una tecla no puede hacer dos cosas) y persistencia como el
       resto de preferencias. El mapa de atajos debería vivir en un solo módulo, y
       los botones de la barra mostrar su atajo en el `title`.
-- [ ] **Columna Delta Time**: desde el menú contextual de la cabecera de `Time`,
-      añadir una columna con el tiempo transcurrido entre líneas. Formato: si los
-      instantes traen milisegundos, delta en milisegundos; si no, en minutos y
-      segundos enteros. Decisiones: calcularlo sobre todas las filas o solo sobre
-      las visibles con filtro (lo natural es lo segundo), qué mostrar en la
-      primera fila y qué hacer con las líneas sin instante.
+- [ ] **Columna Delta Time** (alcance decidido): desde el menú contextual de la
+      cabecera de `Time`, añadir una columna con el tiempo transcurrido entre
+      líneas. En el **grid principal el delta se calcula sobre todas las filas del
+      fichero**, no solo sobre las visibles. Formato: milisegundos si el log los
+      trae; minutos y segundos enteros si no. Pendiente: qué mostrar en la primera
+      fila y qué hacer con las líneas sin instante.
 - [ ] **Exportar y copiar la selección**: menú contextual sobre las líneas
       marcadas, con copiar y exportar a texto, con y sin número de línea. Copiar
       ya se puede hacer con `navigator.clipboard`; exportar a fichero necesita un
@@ -61,12 +62,36 @@ Peticiones del dueño del proyecto, en el orden en que conviene atacarlas.
       nueva, hay que autorizarla antes de añadirla**. A decidir: formato del
       número (`1234` o `1234: `), si el fichero lleva cabecera y si el "con
       números" es una preferencia recordada en vez de cuatro acciones distintas.
-- [ ] **Búsqueda avanzada en la zona inferior**: panel bajo el grid con su propio
-      filtro, que permita recorrer las coincidencias y seguir el fichero si el
-      tail está activo, y que se pueda ocultar. Antes de implementarlo hay que
-      aclarar el alcance: ¿segundo filtro independiente del de la barra?, ¿lista de
-      coincidencias con salto a cada una?, ¿comparte niveles y texto con la barra
-      o tiene los suyos?
+- [ ] **Filtro avanzado con grid propio** (alcance definido por el usuario).
+      Consulta estructurada sobre la sesión, del estilo «eventos WARN que
+      contengan "tal", entre los días 2 y 15 y dentro de la franja de 12:07 a
+      15:29». El resultado se ve en un **segundo grid en la parte inferior**, de
+      un tercio de la pantalla como máximo, con su propia zona de filtros, que se
+      puede ocultar y volver a mostrar.
+      - **Independiente del grid principal**: cada uno mantiene su scroll, su tail
+        y su autoscroll. El de abajo puede estar siguiendo el fichero mientras el
+        de arriba está parado, y al revés. Técnicamente no hace falta otro hilo de
+        tail: la sesión ya se sigue una vez en Rust; cada grid solo decide si se
+        pega al final de *su* resultado filtrado.
+      - Su **Delta Time** se calcula sobre las filas que pasan el filtro, no sobre
+        todas: es justo lo útil cuando estás filtrando.
+      - El panel es **por pestaña**: aparece solo en la pestaña donde se pidió y
+        desaparece al cambiar a otra que no lo tenga, reapareciendo al volver.
+      - Pendiente de decidir con el usuario: forma de la consulta (formulario de
+        condiciones frente a sintaxis de texto), si admite OR/NOT además de AND,
+        si el rango de fechas es absoluto o relativo, si la franja horaria se
+        aplica a cada día del rango, si el filtro combina con los niveles y el
+        texto de la barra o los sustituye, y si el grid de abajo puede saltar a la
+        línea correspondiente del principal.
+
+- [ ] **Persistencia de la configuración por fichero**: todo lo que se ajuste
+      sobre un log se recuerda para la próxima vez. Ya se guardan parser, mapeo de
+      columnas, codificación y reglas de color. Añadir: columnas visibles y sus
+      anchos, Delta Time, la consulta del filtro avanzado y si estaba abierto, y
+      decidir si el tail y el autoscroll pasan de ser preferencia global a ser
+      estado por fichero. Cuidado con recordar una consulta restrictiva: puede
+      parecer que al fichero le faltan líneas, así que hace falta un indicador
+      visible y una forma clara de limpiarla.
 
 ## Publicación
 
