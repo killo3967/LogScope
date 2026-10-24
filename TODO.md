@@ -77,12 +77,22 @@ Peticiones del dueño del proyecto, en el orden en que conviene atacarlas.
         todas: es justo lo útil cuando estás filtrando.
       - El panel es **por pestaña**: aparece solo en la pestaña donde se pidió y
         desaparece al cambiar a otra que no lo tenga, reapareciendo al volver.
+      - **Vale también para pestañas con ficheros combinados** (pedido por el
+        usuario). El filtro se aplica al orden entremezclado por instante, no a
+        cada fuente por separado; y ahí tiene sentido añadir la **fuente** como
+        condición, para quedarse con uno solo de los ficheros de la vista
+        combinada (la columna `Source` ya existe).
+      - En una pestaña combinada el tail está desactivado hoy: si el grid de
+        abajo debe poder seguir en vivo una vista combinada, hay que resolver
+        antes el reordenado por instante con líneas entrando (ver «Vista
+        combinada» en `README.md` y `SPEC.md`).
       - Pendiente de decidir con el usuario: forma de la consulta (formulario de
         condiciones frente a sintaxis de texto), si admite OR/NOT además de AND,
         si el rango de fechas es absoluto o relativo, si la franja horaria se
         aplica a cada día del rango, si el filtro combina con los niveles y el
-        texto de la barra o los sustituye, y si el grid de abajo puede saltar a la
-        línea correspondiente del principal.
+        texto de la barra o los sustituye, si el grid de abajo puede saltar a la
+        línea correspondiente del principal, y si en las pestañas combinadas se
+        puede filtrar por fuente.
 
 - [ ] **Persistencia de la configuración por fichero**: todo lo que se ajuste
       sobre un log se recuerda para la próxima vez. Ya se guardan parser, mapeo de
