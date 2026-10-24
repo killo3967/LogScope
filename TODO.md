@@ -26,6 +26,48 @@ que conviene hacerlo.
       aplicación lo sigue. También queda pendiente ver que la columna `#` no
       duplique líneas al crecer.
 
+## Funciones pedidas
+
+Peticiones del dueño del proyecto, en el orden en que conviene atacarlas.
+
+- [ ] **Selección de varias líneas** — requisito de casi todo lo que sigue. Hoy
+      solo hay una fila marcada con el clic (`selected` en `LogGrid.tsx`) y el
+      menú de selección aparece al marcar texto con el ratón. Hace falta
+      selección por rango (Mayús+clic), añadir y quitar líneas (Ctrl+clic) y
+      decidir qué pasa con la selección al cambiar el filtro o al entrar líneas
+      por el tail.
+- [ ] **Atajos de teclado**: `F12` pantalla completa (oculta las dos filas de la
+      barra y deja el log con su cabecera), `F` follow tail, `S` scroll
+      automático, `O` abrir un log. Detalles a resolver: los atajos no deben
+      dispararse mientras se escribe en un campo (filtro, patrón, reglas) ni con
+      la ventana de reglas abierta; `F12` en WebView2 abre las herramientas de
+      desarrollo si están habilitadas, así que hay que reservarlo o desactivarlas;
+      la pantalla completa necesita una salida clara (`Esc`) y no confundirse con
+      el F11 del sistema.
+- [ ] **Configuración de atajos**: sección nueva en Ajustes para reasignarlos,
+      con validación (una tecla no puede hacer dos cosas) y persistencia como el
+      resto de preferencias. El mapa de atajos debería vivir en un solo módulo, y
+      los botones de la barra mostrar su atajo en el `title`.
+- [ ] **Columna Delta Time**: desde el menú contextual de la cabecera de `Time`,
+      añadir una columna con el tiempo transcurrido entre líneas. Formato: si los
+      instantes traen milisegundos, delta en milisegundos; si no, en minutos y
+      segundos enteros. Decisiones: calcularlo sobre todas las filas o solo sobre
+      las visibles con filtro (lo natural es lo segundo), qué mostrar en la
+      primera fila y qué hacer con las líneas sin instante.
+- [ ] **Exportar y copiar la selección**: menú contextual sobre las líneas
+      marcadas, con copiar y exportar a texto, con y sin número de línea. Copiar
+      ya se puede hacer con `navigator.clipboard`; exportar a fichero necesita un
+      diálogo de guardado, que en Tauri 2 es `tauri-plugin-dialog`: **dependencia
+      nueva, hay que autorizarla antes de añadirla**. A decidir: formato del
+      número (`1234` o `1234: `), si el fichero lleva cabecera y si el "con
+      números" es una preferencia recordada en vez de cuatro acciones distintas.
+- [ ] **Búsqueda avanzada en la zona inferior**: panel bajo el grid con su propio
+      filtro, que permita recorrer las coincidencias y seguir el fichero si el
+      tail está activo, y que se pueda ocultar. Antes de implementarlo hay que
+      aclarar el alcance: ¿segundo filtro independiente del de la barra?, ¿lista de
+      coincidencias con salto a cada una?, ¿comparte niveles y texto con la barra
+      o tiene los suyos?
+
 ## Publicación
 
 - [ ] **Traducir la documentación al inglés**. Orden recomendado:
