@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 
+import { t } from "./textos";
+
 const ROLES = [
   "time",
   "level",
@@ -57,19 +59,17 @@ export function ColumnMapper({
     <div className="browser-backdrop" onClick={onClose}>
       <div className="browser mapper" onClick={(event) => event.stopPropagation()}>
         <header className="browser-head">
-          <strong>Columnas de la entrada</strong>
-          <span className="hint">
-            Cada línea del registro va a una columna. `ignore` la descarta.
-          </span>
-          <button onClick={onClose}>Cerrar</button>
+          <strong>{t("cols.titulo")}</strong>
+          <span className="hint">{t("cols.pista")}</span>
+          <button onClick={onClose}>{t("cols.cerrar")}</button>
         </header>
 
         <div className="mapper-body">
           {sampleLines.map((line, index) => (
             <div className="mapper-row" key={index}>
-              <span className="mapper-index">Línea {index + 1}</span>
+              <span className="mapper-index">{t("cols.linea", { n: index + 1 })}</span>
               <code className="mapper-sample" title={line}>
-                {line || "(vacía)"}
+                {line || t("cols.vacia")}
               </code>
               <select
                 className={`role-${draft[index] ?? "ignore"}`}
@@ -85,23 +85,21 @@ export function ColumnMapper({
             </div>
           ))}
           {sampleLines.length === 0 && (
-            <div className="mapper-row muted">
-              Este fichero no tiene entradas de varias líneas.
-            </div>
+            <div className="mapper-row muted">{t("cols.sinEntradas")}</div>
           )}
         </div>
 
         <footer className="browser-foot">
           <span className="selected-path">
-            {draft.includes("time") ? "" : "aviso: ninguna línea marcada como time"}
+            {draft.includes("time") ? "" : t("cols.avisoSinTime")}
           </span>
-          <button onClick={onClose}>Cancelar</button>
+          <button onClick={onClose}>{t("cols.cancelar")}</button>
           <button
             className="primary"
             disabled={busy || sampleLines.length === 0}
             onClick={() => onApply(draft)}
           >
-            {busy ? "Aplicando…" : "Aplicar"}
+            {busy ? t("cols.aplicando") : t("cols.aplicar")}
           </button>
         </footer>
       </div>

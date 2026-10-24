@@ -25,12 +25,17 @@ pub struct DirListing {
 /// Lista un único nivel del sistema de ficheros. El árbol se construye por
 /// expansión perezosa: cada nodo pide sus hijos solo cuando se abre.
 pub fn list_dir(path: &Path) -> Result<DirListing, String> {
-    let meta = std::fs::metadata(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let meta = std::fs::metadata(path)
+        .map_err(|e| crate::error_io(format!("{}: {e}", path.display())))?;
     if !meta.is_dir() {
-        return Err(format!("no es un directorio: {}", path.display()));
+        return Err(crate::error_json(
+            "not_a_directory",
+            &[("path", &path.display().to_string())],
+        ));
     }
 
-    let read = std::fs::read_dir(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let read = std::fs::read_dir(path)
+        .map_err(|e| crate::error_io(format!("{}: {e}", path.display())))?;
     let mut entries = Vec::new();
     let mut truncated = false;
 
@@ -165,7 +170,10 @@ mod tests {
         std::fs::write(&file, b"contenido").unwrap();
 
         let error = list_dir(&file).unwrap_err();
-        assert!(error.contains("no es un directorio"), "error inesperado: {error}");
+        assert!(
+            error.contains("not_a_directory"),
+            "error inesperado: {error}"
+        );
 
         let _ = std::fs::remove_dir_all(&dir);
     }

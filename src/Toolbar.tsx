@@ -1,5 +1,6 @@
 import type { EncodingKind, ParserKind, Level } from "./types";
 import { ENCODINGS, LEVELS, LEVEL_BIT } from "./types";
+import { t } from "./textos";
 
 interface Props {
   path: string;
@@ -44,31 +45,37 @@ export function Toolbar(props: Props) {
       <div className="toolbar-row">
         <input
           className="path"
-          placeholder="C:\ruta\al\fichero.log"
+          placeholder={t("toolbar.rutaPlaceholder")}
           value={props.path}
           onChange={(event) => props.onPathChange(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Enter") props.onOpen();
           }}
         />
-        <button onClick={props.onBrowse} disabled={props.busy} title="Navegar por el árbol de directorios">
-          Examinar…
+        <button
+          onClick={props.onBrowse}
+          disabled={props.busy}
+          title={t("toolbar.examinarTooltip")}
+        >
+          {t("toolbar.examinar")}
         </button>
         <button onClick={props.onOpen} disabled={props.busy || props.path === ""}>
-          {props.busy ? "Abriendo…" : "Abrir"}
+          {props.busy ? t("toolbar.abriendo") : t("toolbar.abrir")}
         </button>
         <button
           onClick={props.onColumns}
           disabled={!props.columnsEnabled}
-          title="Asignar cada línea del registro a su columna"
+          title={t("toolbar.columnasTooltip")}
         >
-          Columnas…
+          {t("toolbar.columnas")}
         </button>
         <button
           onClick={props.onRules}
-          title="Colorear filas o palabras según un patrón"
+          title={t("toolbar.reglasTooltip")}
         >
-          Reglas{props.rulesCount > 0 ? ` (${props.rulesCount})` : "…"}
+          {props.rulesCount > 0
+            ? t("toolbar.reglasN", { n: props.rulesCount })
+            : t("toolbar.reglasVacio")}
         </button>
 
         <button
@@ -77,11 +84,11 @@ export function Toolbar(props: Props) {
           disabled={!props.tailEnabled}
           title={
             props.tailEnabled
-              ? "Seguir el fichero en vivo"
-              : "No disponible al combinar varios ficheros"
+              ? t("toolbar.tailSeguirTooltip")
+              : t("toolbar.tailNoDisponibleTooltip")
           }
         >
-          {props.tailing ? "Detener tail" : "Tail en vivo"}
+          {props.tailing ? t("toolbar.detenerTail") : t("toolbar.tailEnVivo")}
         </button>
 
         <label className="check">
@@ -90,10 +97,10 @@ export function Toolbar(props: Props) {
             checked={props.autoScroll}
             onChange={(event) => props.onAutoScrollChange(event.target.checked)}
           />
-          Autoscroll
+          {t("toolbar.autoscroll")}
         </label>
 
-        <button className="icon" onClick={props.onSettings} title="Ajustes">
+        <button className="icon" onClick={props.onSettings} title={t("toolbar.ajustesTooltip")}>
           ⚙
         </button>
       </div>
@@ -101,7 +108,7 @@ export function Toolbar(props: Props) {
       <div className="toolbar-row">
         <input
           className="filter"
-          placeholder="Filtrar por texto…"
+          placeholder={t("toolbar.filtroPlaceholder")}
           value={props.text}
           onChange={(event) => props.onTextChange(event.target.value)}
           disabled={props.disabled}
@@ -126,7 +133,7 @@ export function Toolbar(props: Props) {
             value={props.delimiter}
             maxLength={1}
             onChange={(event) => props.onDelimiterChange(event.target.value)}
-            title="Delimitador"
+            title={t("toolbar.delimitadorTooltip")}
           />
         )}
         {props.parser === "pattern" && (
@@ -134,7 +141,7 @@ export function Toolbar(props: Props) {
             className="pattern"
             value={props.pattern}
             onChange={(event) => props.onPatternChange(event.target.value)}
-            title="Regex con grupos con nombre"
+            title={t("toolbar.patronTooltip")}
           />
         )}
 
@@ -142,13 +149,13 @@ export function Toolbar(props: Props) {
             primera ya tiene ruta, botones y seguimiento. */}
         <div className="toolbar-right">
           <label className="field">
-            <span className="field-label">Formato</span>
+            <span className="field-label">{t("toolbar.formato")}</span>
             <select
               value={props.parser}
               onChange={(event) =>
                 props.onParserChange(event.target.value as ParserKind)
               }
-              title="Cómo interpretar cada línea del fichero"
+              title={t("toolbar.formatoTooltip")}
             >
               <option value="auto">auto</option>
               <option value="basic">basic</option>
@@ -165,7 +172,7 @@ export function Toolbar(props: Props) {
           </label>
 
           <label className="field">
-            <span className="field-label">Codificación</span>
+            <span className="field-label">{t("toolbar.codificacion")}</span>
             <select
               value={props.encoding}
               onChange={(event) =>
@@ -173,13 +180,15 @@ export function Toolbar(props: Props) {
               }
               title={
                 props.detectedEncoding
-                  ? `Detectada en el log abierto: ${props.detectedEncoding}`
-                  : "Codificación de los bytes del fichero"
+                  ? t("toolbar.codificacionDetectadaTooltip", {
+                      encoding: props.detectedEncoding,
+                    })
+                  : t("toolbar.codificacionTooltip")
               }
             >
               {ENCODINGS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
+                <option key={option} value={option}>
+                  {t(`toolbar.encoding.${option}`)}
                 </option>
               ))}
             </select>

@@ -27,6 +27,37 @@ use crate::columnizers::{
 const HEAD: usize = 64 * 1024;
 const CHUNK: usize = 1024 * 1024;
 
+/// Error del núcleo hacia la interfaz: un JSON compacto
+/// `{"code":"<código>","params":{"nombre":"valor"}}`. La interfaz compone la
+/// frase visible con la clave `error.<código>` del catálogo de textos, así que
+/// aquí no se guarda texto traducible. Los parámetros son siempre cadenas.
+///
+/// Los fallos del sistema (`std::io`, `serde`…) se envían como
+/// `{"code":"io","params":{"message":"texto original"}}` para no perder el
+/// detalle que solo el sistema sabe explicar.
+pub(crate) fn error_json(code: &str, params: &[(&str, &str)]) -> String {
+    let mut objeto = serde_json::Map::new();
+    let mut valores = serde_json::Map::new();
+    for (nombre, valor) in params {
+        valores.insert(
+            (*nombre).to_string(),
+            serde_json::Value::String((*valor).to_string()),
+        );
+    }
+    objeto.insert(
+        "code".to_string(),
+        serde_json::Value::String(code.to_string()),
+    );
+    objeto.insert("params".to_string(), serde_json::Value::Object(valores));
+    serde_json::Value::Object(objeto).to_string()
+}
+
+/// Envuelve el mensaje de una operación del sistema sin reinterpretarlo.
+pub(crate) fn error_io(message: impl ToString) -> String {
+    let texto = message.to_string();
+    error_json("io", &[("message", texto.as_str())])
+}
+
 pub struct Session {
     pub id: String,
     /// Primer fichero: es el que sigue el tail en vivo.
@@ -201,7 +232,7 @@ fn build_parser(options: &OpenOptions, head: &[u8]) -> Result<Arc<dyn LogParser>
             let pattern = options
                 .pattern
                 .as_deref()
-                .ok_or("el parser pattern necesita el campo pattern")?;
+                .ok_or_else(|| error_json("pattern_missing", &[]))?;
             PatternParser::new(pattern)
         }
         "dsv" => {
@@ -212,16 +243,17 @@ fn build_parser(options: &OpenOptions, head: &[u8]) -> Result<Arc<dyn LogParser>
                 .unwrap_or(',');
             Ok(DsvParser::with_detection(delim, &sample))
         }
-        other => Err(format!("parser desconocido: {other}")),
+        other => Err(error_json("unknown_parser", &[("parser", other)])),
     }
 }
 
 /// Carga un fichero por bloques: la cabecera primero, para deducir el parser.
 fn load_source(path: &PathBuf, options: &OpenOptions) -> Result<EntryTable, String> {
-    let mut file = std::fs::File::open(path).map_err(|e| format!("no se puede abrir: {e}"))?;
+    let mut file = std::fs::File::open(path)
+        .map_err(|e| error_json("open_failed", &[("message", &e.to_string())]))?;
 
     let mut head = vec![0u8; HEAD];
-    let read = file.read(&mut head).map_err(|e| e.to_string())?;
+    let read = file.read(&mut head).map_err(error_io)?;
     head.truncate(read);
 
     let parser = build_parser(options, &head)?;
@@ -233,7 +265,7 @@ fn load_source(path: &PathBuf, options: &OpenOptions) -> Result<EntryTable, Stri
         match file.read(&mut buf) {
             Ok(0) => break,
             Ok(n) => table.ingest_bytes(&buf[..n]),
-            Err(e) => return Err(format!("error de lectura: {e}")),
+            Err(e) => return Err(error_json("read_failed", &[("message", &e.to_string())])),
         }
     }
     Ok(table)
@@ -256,8 +288,9 @@ fn load_sources(paths: &[PathBuf], options: &OpenOptions) -> Result<LogSet, Stri
         // en vez de devolver una vista combinada que engaña. Un fichero vacío
         // no es un problema: no aporta líneas.
         if combinando && !table.is_empty() && !table.has_timestamps() {
-            return Err(format!(
-                "no se puede combinar: {name} no tiene columna de fecha y hora"
+            return Err(error_json(
+                "combine_without_timestamps",
+                &[("file", &name)],
             ));
         }
 
@@ -288,7 +321,7 @@ fn get_session(state: &AppState, id: &str) -> Result<Arc<Session>, String> {
     sessions
         .get(id)
         .cloned()
-        .ok_or_else(|| format!("sesión desconocida: {id}"))
+        .ok_or_else(|| error_json("no_session", &[("id", id)]))
 }
 
 #[tauri::command]
@@ -298,14 +331,14 @@ fn open_files(
     options: OpenOptions,
 ) -> Result<OpenResult, String> {
     if paths.is_empty() {
-        return Err("no se indicó ningún fichero".to_string());
+        return Err(error_json("no_file_selected", &[]));
     }
 
     let mut files: Vec<PathBuf> = Vec::with_capacity(paths.len());
     for raw in &paths {
         let path = PathBuf::from(raw);
         if !path.is_file() {
-            return Err(format!("no es un fichero: {raw}"));
+            return Err(error_json("not_a_file", &[("path", raw)]));
         }
         files.push(path);
     }
@@ -382,11 +415,7 @@ fn read_page(
 fn start_tail(app: AppHandle, state: State<'_, AppState>, session_id: String) -> Result<(), String> {
     let session = get_session(&state, &session_id)?;
     if lock_set(&session).is_merged() {
-        return Err(
-            "el tail en vivo solo está disponible con un único fichero: en una vista \
-             combinada el orden se recalcularía en cada línea"
-                .to_string(),
-        );
+        return Err(error_json("tail_merged", &[]));
     }
     if session
         .tail_running
@@ -497,9 +526,14 @@ mod tests {
             Err(error) => error,
         };
 
-        assert!(error.contains("no se puede combinar"), "{error}");
-        assert!(error.contains("no tiene columna de fecha y hora"), "{error}");
-        assert!(error.contains("logscope-combinar-sin"), "el error debe nombrar el fichero: {error}");
+        assert!(
+            error.contains("combine_without_timestamps"),
+            "el error debe llevar el código: {error}"
+        );
+        assert!(
+            error.contains("logscope-combinar-sin"),
+            "el error debe nombrar el fichero: {error}"
+        );
 
         let _ = std::fs::remove_file(con);
         let _ = std::fs::remove_file(sin);

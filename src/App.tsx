@@ -21,6 +21,8 @@ import type {
   Stats,
 } from "./types";
 import { ALL_LEVELS, DEFAULT_SETTINGS, formatBytes, sourceKey } from "./types";
+import { mensajeDeError } from "./errores";
+import { t } from "./textos";
 
 const WIDTHS_KEY = "logscope.columnWidths.v1";
 const RULES_KEY = "logscope.rulesBySource.v1";
@@ -168,7 +170,7 @@ export default function App() {
 
         const title =
           result.sources.length > 1
-            ? `${result.sources.length} ficheros`
+            ? t("tab.ficheros", { n: result.sources.length })
             : (result.sources[0] ?? targets[0]);
 
         const mapping =
@@ -215,7 +217,7 @@ export default function App() {
           },
         }));
       } catch (cause) {
-        setError(String(cause));
+        setError(mensajeDeError(String(cause)));
       } finally {
         setBusy(false);
       }
@@ -315,9 +317,7 @@ export default function App() {
   const handleToggleTail = useCallback(async () => {
     if (!active) return;
     if (active.session.merged) {
-      setError(
-        "El tail en vivo solo está disponible con un único fichero: en una vista combinada el orden se recalcularía en cada línea.",
-      );
+      setError(t("app.tailMerged"));
       return;
     }
     try {
@@ -330,7 +330,7 @@ export default function App() {
       }
       setError(null);
     } catch (cause) {
-      setError(String(cause));
+      setError(mensajeDeError(String(cause)));
     }
   }, [active, updateTab]);
 
@@ -574,8 +574,8 @@ export default function App() {
       {dropActive && (
         <div className="drop-overlay">
           <div className="drop-box">
-            <strong>Suelta el fichero para abrirlo</strong>
-            <span>Se abre en una pestaña nueva. Si sueltas varios, una por fichero.</span>
+            <strong>{t("app.soltar")}</strong>
+            <span>{t("app.soltarDetalle")}</span>
           </div>
         </div>
       )}
@@ -645,7 +645,11 @@ export default function App() {
               }}
               title={tab.session.sources.join("\n")}
             >
-              {tab.session.merged && <span className="tab-badge" title="Vista combinada">⇄</span>}
+              {tab.session.merged && (
+                <span className="tab-badge" title={t("tab.vistaCombinada")}>
+                  ⇄
+                </span>
+              )}
               <span className="tab-title">{tab.title}</span>
               <button
                 className="tab-close"
@@ -653,7 +657,7 @@ export default function App() {
                   event.stopPropagation();
                   void closeTab(tab.id);
                 }}
-                title="Cerrar"
+                title={t("tab.cerrar")}
               >
                 ✕
               </button>
@@ -670,7 +674,7 @@ export default function App() {
           <button
             className="error-close"
             onClick={() => setError(null)}
-            title="Cerrar el mensaje"
+            title={t("app.cerrarMensaje")}
           >
             ✕
           </button>
@@ -695,7 +699,7 @@ export default function App() {
           onTotal={handleTotal}
         />
       ) : (
-        <div className="empty">Abre un fichero de log para empezar.</div>
+        <div className="empty">{t("app.vacio")}</div>
       )}
 
       <FileBrowser
@@ -760,17 +764,29 @@ export default function App() {
       />
 
       <footer className="status">
-        <span>{active ? active.session.parser : "sin sesión"}</span>
+        <span>{active ? active.session.parser : t("status.sinSesion")}</span>
         <span>
-          {active ? active.total.toLocaleString("es-ES") : 0} líneas
-          {active?.session.merged ? ` · ${active.session.sources.length} ficheros` : ""}
+          {t("status.lineas", {
+            total: active ? active.total.toLocaleString("es-ES") : 0,
+          })}
+          {active?.session.merged
+            ? t("status.ficheros", { total: active.session.sources.length })
+            : ""}
         </span>
-        <span>{active ? formatBytes(active.session.bytes) : "0 B"}</span>
+        <span>{active ? formatBytes(active.session.bytes) : formatBytes(0)}</span>
         <span className={active?.tailing ? "live" : ""}>
-          {active?.tailing ? "tail activo" : "tail parado"}
+          {active?.tailing ? t("status.tailActivo") : t("status.tailParado")}
         </span>
-        <span>{tabs.length} pestaña{tabs.length === 1 ? "" : "s"}</span>
-        <span>{activeRules.length} regla{activeRules.length === 1 ? "" : "s"}</span>
+        <span>
+          {t(tabs.length === 1 ? "status.pestana" : "status.pestanas", {
+            n: tabs.length,
+          })}
+        </span>
+        <span>
+          {t(activeRules.length === 1 ? "status.regla" : "status.reglas", {
+            n: activeRules.length,
+          })}
+        </span>
       </footer>
     </div>
   );

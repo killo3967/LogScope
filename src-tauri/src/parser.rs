@@ -573,9 +573,10 @@ pub struct PatternParser {
 
 impl PatternParser {
     pub fn new(pattern: &str) -> Result<Arc<dyn LogParser>, String> {
-        let regex = Regex::new(pattern).map_err(|e| format!("regex inválida: {e}"))?;
+        let regex = Regex::new(pattern)
+            .map_err(|e| crate::error_json("invalid_regex", &[("message", &e.to_string())]))?;
         if regex.capture_names().flatten().next().is_none() {
-            return Err("el patrón necesita al menos un grupo con nombre, p.ej. (?P<Message>.*)".into());
+            return Err(crate::error_json("pattern_needs_named_group", &[]));
         }
         let fields: Vec<String> = regex
             .capture_names()

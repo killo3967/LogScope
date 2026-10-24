@@ -1,5 +1,7 @@
 import { useEffect } from "react";
 
+import { t } from "./textos";
+
 interface Props {
   open: { text: string; x: number; y: number } | null;
   onCopy: (text: string) => void;
@@ -49,17 +51,17 @@ export function SelectionMenu({ open, onCopy, onRules, onClose }: Props) {
         </div>
 
         <button className="menu-item" onClick={() => onCopy(open.text)}>
-          Copiar
+          {t("sel.copiar")}
         </button>
 
         <div className="menu-sep" />
 
         <button
           className="menu-item"
-          title="Abrir las reglas de color con este texto como patrón"
+          title={t("sel.reglasTooltip")}
           onClick={() => onRules(open.text)}
         >
-          Reglas de color con «{recorte}»
+          {t("sel.reglasCon", { texto: recorte })}
         </button>
       </div>
     </>

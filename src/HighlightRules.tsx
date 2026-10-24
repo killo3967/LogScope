@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import type { HighlightRule } from "./types";
+import { t } from "./textos";
 
 const PALETTE = ["#ef6b6b", "#e0b341", "#7fbf7f", "#4c9aff", "#c792ea", "#ff9d5c"];
 
@@ -137,22 +138,18 @@ export function HighlightRules({ open, rules, onChange, onClose }: Props) {
       <header
         className={`browser-head arrastrable${arrastrando ? " arrastrando" : ""}`}
         onPointerDown={startDrag}
-        title="Arrastra esta barra para mover la ventana"
+        title={t("rules.arrastrarTooltip")}
       >
-        <strong>Reglas de color</strong>
-        <span className="hint">
-          Coincidencias de texto o expresión regular. La primera regla que coincide gana.
-        </span>
+        <strong>{t("rules.titulo")}</strong>
+        <span className="hint">{t("rules.pista")}</span>
         <button onPointerDown={(event) => event.stopPropagation()} onClick={onClose}>
-          Cerrar
+          {t("rules.cerrar")}
         </button>
       </header>
 
       <div className="mapper-body">
         {rules.length === 0 && (
-          <div className="mapper-row muted">
-            Sin reglas. Añade una para colorear filas o palabras.
-          </div>
+          <div className="mapper-row muted">{t("rules.vacio")}</div>
         )}
 
         {rules.map((rule) => (
@@ -160,8 +157,14 @@ export function HighlightRules({ open, rules, onChange, onClose }: Props) {
             <div className="rule-row">
               <input
                 className={`rule-pattern${regexInvalida(rule) ? " invalid" : ""}`}
-                placeholder={rule.isRegex ? "expresión regular" : "texto a buscar"}
-                title={regexInvalida(rule) ? "Expresión regular no válida: la regla se ignora" : undefined}
+                placeholder={
+                  rule.isRegex
+                    ? t("rules.patronRegexPlaceholder")
+                    : t("rules.patronTextoPlaceholder")
+                }
+                title={
+                  regexInvalida(rule) ? t("rules.regexInvalidaTooltip") : undefined
+                }
                 value={rule.pattern}
                 onChange={(event) => update(rule.id, { pattern: event.target.value })}
               />
@@ -171,8 +174,8 @@ export function HighlightRules({ open, rules, onChange, onClose }: Props) {
                   update(rule.id, { target: event.target.value as HighlightRule["target"] })
                 }
               >
-                <option value="word">palabra</option>
-                <option value="row">fila entera</option>
+                <option value="word">{t("rules.palabra")}</option>
+                <option value="row">{t("rules.filaEntera")}</option>
               </select>
               <label className="check">
                 <input
@@ -184,7 +187,7 @@ export function HighlightRules({ open, rules, onChange, onClose }: Props) {
               </label>
               <label
                 className="check"
-                title="Distinguir mayúsculas y minúsculas. Desmarcado, la coincidencia no distingue."
+                title={t("rules.caseSensitiveTooltip")}
               >
                 <input
                   type="checkbox"
@@ -199,14 +202,12 @@ export function HighlightRules({ open, rules, onChange, onClose }: Props) {
                 value={rule.color}
                 onChange={(event) => update(rule.id, { color: event.target.value })}
               />
-              <button onClick={() => remove(rule.id)} title="Eliminar regla">
+              <button onClick={() => remove(rule.id)} title={t("rules.eliminarTooltip")}>
                 ✕
               </button>
             </div>
             {regexInvalida(rule) && (
-              <div className="rule-error">
-                Expresión regular no válida: esta regla no colorea nada hasta que la corrijas.
-              </div>
+              <div className="rule-error">{t("rules.regexInvalida")}</div>
             )}
           </div>
         ))}
@@ -214,11 +215,13 @@ export function HighlightRules({ open, rules, onChange, onClose }: Props) {
 
       <footer className="browser-foot">
         <span className="selected-path">
-          {rules.length} regla{rules.length === 1 ? "" : "s"}
+          {t(rules.length === 1 ? "rules.totalUna" : "rules.totalVarias", {
+            n: rules.length,
+          })}
         </span>
-        <button onClick={add}>Añadir regla</button>
+        <button onClick={add}>{t("rules.anadir")}</button>
         <button className="primary" onClick={onClose}>
-          Hecho
+          {t("rules.hecho")}
         </button>
       </footer>
     </div>

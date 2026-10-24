@@ -4,6 +4,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 
 import type { Filters, HighlightRule, PageResult, Row } from "./types";
 import { COLUMN_WIDTHS, DEFAULT_COLUMN_WIDTH, formatClock, formatDate } from "./types";
+import { t } from "./textos";
 
 const PAGE = 200;
 const ROW_HEIGHT = 22;
@@ -283,7 +284,7 @@ export function LogGrid({
   );
 
   if (!sessionId) {
-    return <div className="empty">Abre un fichero de log para empezar.</div>;
+    return <div className="empty">{t("app.vacio")}</div>;
   }
 
   const cellValue = (row: Row, name: string): string => {
@@ -320,7 +321,7 @@ export function LogGrid({
         <div className="grid-header">
           <span
             className="col-head col-rowno"
-            title="Número de línea en el fichero"
+            title={t("grid.numeroLineaTooltip")}
             style={{ width: ROW_NO_WIDTH, minWidth: ROW_NO_WIDTH }}
           >
             #
@@ -334,7 +335,7 @@ export function LogGrid({
               {name}
               <span
                 className="resizer"
-                title="Arrastra para cambiar el ancho"
+                title={t("grid.anchoTooltip")}
                 onMouseDown={(event) => startResize(name, event)}
               />
             </span>
@@ -382,7 +383,7 @@ export function LogGrid({
                     </span>
                   ))
                 ) : (
-                  <span className="cell muted">cargando…</span>
+                  <span className="cell muted">{t("grid.cargando")}</span>
                 )}
               </div>
             );

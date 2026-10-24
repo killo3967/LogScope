@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 
+import { t } from "./textos";
+
 export interface CopySource {
   key: string;
   label: string;
@@ -79,12 +81,14 @@ export function TabMenu({
               disabled={combineCount < 2}
               title={
                 combineCount < 2
-                  ? "Marca dos o más pestañas con Ctrl+clic y vuelve a abrir este menú"
-                  : "Abrir una vista combinada con estas pestañas, ordenada por instante"
+                  ? t("tab.combinarTooltipDeshabilitado")
+                  : t("tab.combinarTooltip")
               }
               onClick={onCombine}
             >
-              Combinar {combineCount >= 2 ? `${combineCount} pestañas` : "pestañas…"}
+              {combineCount >= 2
+                ? t("tab.combinarN", { n: combineCount })
+                : t("tab.combinarVacio")}
             </button>
 
             <div className="menu-sep" />
@@ -94,31 +98,31 @@ export function TabMenu({
               disabled={sinOrigenes}
               title={
                 sinOrigenes
-                  ? "Ningún otro log tiene reglas de color todavía"
-                  : "Copiar las reglas de otro log a este"
+                  ? t("tab.sinOrigenesTooltip")
+                  : t("tab.copiarTooltip")
               }
               onClick={() => setPicking(true)}
             >
-              Copiar colorización de…
+              {t("tab.copiarColorizacion")}
             </button>
 
             <div className="menu-sep" />
 
             <button
               className="menu-item"
-              title="Recarga la interfaz. Se cierran las pestañas abiertas."
+              title={t("tab.recargarTooltip")}
               onClick={onReload}
             >
-              Recargar interfaz
+              {t("tab.recargar")}
             </button>
             <button className="menu-item" onClick={onPrint}>
-              Imprimir…
+              {t("tab.imprimir")}
             </button>
           </>
         ) : (
           <>
             <button className="menu-item menu-back" onClick={() => setPicking(false)}>
-              ← Atrás
+              {t("tab.atras")}
             </button>
             {sources.map((source) => (
               <button

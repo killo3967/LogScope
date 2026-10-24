@@ -44,6 +44,8 @@ las hace el usuario a mano sobre `LogScope.exe`.
   binarios locales, no se versionan.
 - Ficheros de texto con LF (`.gitattributes`); los `.cmd`, con CRLF.
 - Antes de decir que algo funciona: `npm run build` y `cargo test` en verde.
+- El texto visible nunca se escribe en un componente: va a `src/textos.ts` y se
+  usa con `t("zona.clave")`. Los errores del núcleo se devuelven por código.
 - Los cambios de interfaz no se pueden verificar desde la línea de comandos:
   se comprueba `tsc`, se compila y se le pide al usuario que lo pruebe.
 

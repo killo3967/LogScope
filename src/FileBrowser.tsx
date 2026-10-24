@@ -3,6 +3,8 @@ import { invoke } from "@tauri-apps/api/core";
 
 import type { DirEntryInfo, DirListing } from "./types";
 import { formatBytes } from "./types";
+import { mensajeDeError } from "./errores";
+import { t } from "./textos";
 
 interface Props {
   open: boolean;
@@ -29,7 +31,7 @@ export function FileBrowser({ open, onClose, onPick }: Props) {
     setSelected([]);
     invoke<DirEntryInfo[]>("list_roots")
       .then(setRoots)
-      .catch((cause) => setError(String(cause)));
+      .catch((cause) => setError(mensajeDeError(String(cause))));
   }, [open]);
 
   useEffect(() => {
@@ -49,7 +51,7 @@ export function FileBrowser({ open, onClose, onPick }: Props) {
       setChildren((previous) => ({ ...previous, [path]: listing.entries }));
       setError(null);
     } catch (cause) {
-      setError(String(cause));
+      setError(mensajeDeError(String(cause)));
     } finally {
       setLoading(false);
     }
@@ -119,51 +121,57 @@ export function FileBrowser({ open, onClose, onPick }: Props) {
     <div className="browser-backdrop" onClick={onClose}>
       <div className="browser" onClick={(event) => event.stopPropagation()}>
         <header className="browser-head">
-          <strong>Abrir fichero de log</strong>
+          <strong>{t("browser.titulo")}</strong>
           <input
             className="browser-filter"
-            placeholder="Filtrar por nombre…"
+            placeholder={t("browser.filtroPlaceholder")}
             value={filter}
             onChange={(event) => setFilter(event.target.value)}
             autoFocus
           />
-          <button onClick={onClose}>Cerrar</button>
+          <button onClick={onClose}>{t("browser.cerrar")}</button>
         </header>
 
         {error && <div className="browser-error">{error}</div>}
 
         <div className="browser-tree">
-          {roots.length === 0 && <div className="tree-row muted">Cargando unidades…</div>}
+          {roots.length === 0 && (
+            <div className="tree-row muted">{t("browser.cargandoUnidades")}</div>
+          )}
           {renderNodes(roots, 0)}
-          {loading && <div className="tree-row muted">Leyendo…</div>}
+          {loading && <div className="tree-row muted">{t("browser.leyendo")}</div>}
         </div>
 
         <footer className="browser-foot">
           <span className="selected-path" title={selected.join("\n")}>
             {selected.length === 0
-              ? "marca uno o varios ficheros (los de distintos formatos se combinan por hora)"
+              ? t("browser.seleccionVacia")
               : selected.length === 1
                 ? selected[0]
-                : `${selected.length} ficheros seleccionados`}
+                : t("browser.seleccionados", { n: selected.length })}
           </span>
           <button
             disabled={selected.length === 0}
             onClick={() => onPick(selected, "open")}
             title={
               selected.length > 1
-                ? "Abrir cada fichero marcado en su propia pestaña"
-                : "Abrir el fichero marcado"
+                ? t("browser.abrirTooltipVarios")
+                : t("browser.abrirTooltipUno")
             }
           >
-            Abrir{selected.length > 1 ? ` (${selected.length})` : ""}
+            {selected.length > 1
+              ? t("browser.abrirN", { n: selected.length })
+              : t("browser.abrir")}
           </button>
           <button
             className="primary"
             disabled={selected.length < 2}
             onClick={() => onPick(selected, "combine")}
-            title="Combinar los ficheros marcados en orden de instante"
+            title={t("browser.combinarTooltip")}
           >
-            Combinar {selected.length > 1 ? `(${selected.length})` : ""}
+            {selected.length > 1
+              ? t("browser.combinarN", { n: selected.length })
+              : t("browser.combinar")}
           </button>
         </footer>
       </div>

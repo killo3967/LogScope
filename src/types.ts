@@ -137,24 +137,29 @@ export type EncodingKind =
   | "big5"
   | "euc-jp";
 
-export const ENCODINGS: { value: EncodingKind; label: string }[] = [
-  { value: "auto", label: "auto" },
-  { value: "utf8", label: "UTF-8" },
-  { value: "utf16le", label: "UTF-16 LE" },
-  { value: "utf16be", label: "UTF-16 BE" },
-  { value: "utf32le", label: "UTF-32 LE" },
-  { value: "utf32be", label: "UTF-32 BE" },
-  { value: "windows1252", label: "Windows-1252" },
-  { value: "windows1250", label: "Windows-1250" },
-  { value: "windows1251", label: "Windows-1251" },
-  { value: "cp850", label: "CP850 (consola)" },
-  { value: "cp437", label: "CP437 (DOS)" },
-  { value: "iso8859-15", label: "ISO-8859-15" },
-  { value: "koi8-r", label: "KOI8-R" },
-  { value: "shift_jis", label: "Shift-JIS" },
-  { value: "gbk", label: "GBK" },
-  { value: "big5", label: "Big5" },
-  { value: "euc-jp", label: "EUC-JP" },
+/**
+ * Codificaciones ofrecidas en el desplegable, en orden. Aquí solo va el valor
+ * que entiende el núcleo; los nombres visibles están en el catálogo de textos
+ * (`toolbar.encoding.<valor>`).
+ */
+export const ENCODINGS: EncodingKind[] = [
+  "auto",
+  "utf8",
+  "utf16le",
+  "utf16be",
+  "utf32le",
+  "utf32be",
+  "windows1252",
+  "windows1250",
+  "windows1251",
+  "cp850",
+  "cp437",
+  "iso8859-15",
+  "koi8-r",
+  "shift_jis",
+  "gbk",
+  "big5",
+  "euc-jp",
 ];
 
 export const LEVELS: Level[] = [

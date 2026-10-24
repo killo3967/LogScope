@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 
 import type { Settings } from "./types";
+import { t } from "./textos";
 
 interface Props {
   open: boolean;
@@ -32,9 +33,9 @@ export function SettingsPanel({ open, settings, onChange, onClose }: Props) {
     <div className="browser-backdrop" onClick={onClose}>
       <div className="browser mapper rules settings" onClick={(event) => event.stopPropagation()}>
         <header className="browser-head">
-          <strong>Ajustes</strong>
-          <span className="hint">Preferencias guardadas en este equipo.</span>
-          <button onClick={onClose}>Cerrar</button>
+          <strong>{t("settings.titulo")}</strong>
+          <span className="hint">{t("settings.pista")}</span>
+          <button onClick={onClose}>{t("settings.cerrar")}</button>
         </header>
 
         <div className="mapper-body">
@@ -46,7 +47,7 @@ export function SettingsPanel({ open, settings, onChange, onClose }: Props) {
                 onChange({ ...settings, rememberLastOpened: event.target.checked })
               }
             />
-            Reabrir los últimos logs al arrancar
+            {t("settings.reabrir")}
           </label>
 
           <label className="check">
@@ -57,12 +58,9 @@ export function SettingsPanel({ open, settings, onChange, onClose }: Props) {
                 onChange({ ...settings, startWithTail: event.target.checked })
               }
             />
-            Iniciar con el tail en vivo activo
+            {t("settings.iniciarTail")}
           </label>
-          <div className="settings-note">
-            Al abrir un log, empieza a seguirlo solo. No se aplica a las vistas
-            combinadas, donde el orden se recalcularía en cada línea.
-          </div>
+          <div className="settings-note">{t("settings.notaTail")}</div>
 
           <label className="check">
             <input
@@ -72,16 +70,12 @@ export function SettingsPanel({ open, settings, onChange, onClose }: Props) {
                 onChange({ ...settings, startWithAutoScroll: event.target.checked })
               }
             />
-            Iniciar con el autoscroll activo
+            {t("settings.iniciarAutoscroll")}
           </label>
-          <div className="settings-note">
-            Se aplica al arrancar y al abrir cada log. Puedes desmarcarlo en
-            cualquier momento con la casilla de la barra o moviendo la rueda
-            hacia arriba.
-          </div>
+          <div className="settings-note">{t("settings.notaAutoscroll")}</div>
 
           <div className="settings-block">
-            <div className="settings-title">Últimos logs recordados</div>
+            <div className="settings-title">{t("settings.ultimos")}</div>
 
             {ultimos && ultimos.paths.length > 0 ? (
               <>
@@ -93,15 +87,17 @@ export function SettingsPanel({ open, settings, onChange, onClose }: Props) {
                   ))}
                 </ul>
                 <div className="hint">
-                  Parser {ultimos.parser}
-                  {ultimos.mapping ? ` · ${ultimos.mapping.length} columnas forzadas` : ""}
+                  {t("settings.parser", { parser: ultimos.parser })}
+                  {ultimos.mapping
+                    ? t("settings.columnasForzadas", { n: ultimos.mapping.length })
+                    : ""}
                 </div>
                 <button onClick={() => onChange({ ...settings, lastOpen: null })}>
-                  Olvidar estos logs
+                  {t("settings.olvidar")}
                 </button>
               </>
             ) : (
-              <div className="hint">Todavía no se ha abierto ningún log.</div>
+              <div className="hint">{t("settings.sinLogs")}</div>
             )}
           </div>
         </div>
@@ -109,7 +105,7 @@ export function SettingsPanel({ open, settings, onChange, onClose }: Props) {
         <footer className="browser-foot">
           <span className="selected-path" />
           <button className="primary" onClick={onClose}>
-            Hecho
+            {t("settings.hecho")}
           </button>
         </footer>
       </div>

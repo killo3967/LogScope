@@ -87,6 +87,8 @@ gh release create vX.Y.Z LogScope.exe --title "LogScope vX.Y.Z" --notes-file not
 ```
 src/                 interfaz (React + TypeScript)
   App.tsx            estado de pestañas, apertura, ajustes y atajos
+  textos.ts          catálogo de todos los textos visibles (preparado para i18n)
+  errores.ts         traduce los códigos de error del núcleo a frases
   LogGrid.tsx        grid virtualizado, reglas de color y arrastre de columnas
   Toolbar.tsx        barra: ruta, acciones, formato, codificación y filtros
   HighlightRules.tsx panel de reglas (ventana arrastrable)
@@ -108,6 +110,19 @@ docs/                capturas usadas en la documentación
 `samples/` está en `.gitignore`: no se versiona. Si necesitas datos, cualquier
 log real sirve; para las pruebas de carga se usó un fichero sintético de 200 000
 líneas en formato log4net.
+
+## Textos y errores
+
+Ningún componente escribe texto visible directamente: todos leen de
+`src/textos.ts` con `t("zona.clave", params)`. Para añadir un idioma basta con
+un diccionario nuevo en ese fichero y un valor en `Idioma`; no hay dependencias
+de i18n.
+
+Los errores del núcleo viajan como JSON (`{"code":"…","params":{…}}`, ver
+`error_json` en `src-tauri/src/lib.rs`) y `src/errores.ts` los convierte en la
+frase de `error.<código>`. Los errores del sistema van con `code: "io"` y el
+texto original en `params.message`, para no perder información. Si añades un
+error nuevo en Rust, añade también su clave `error.<código>` al catálogo.
 
 ## Detalles que ahorran tiempo
 
