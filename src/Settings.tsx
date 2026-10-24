@@ -1,7 +1,8 @@
 import { useEffect } from "react";
 
 import type { Settings } from "./types";
-import { t } from "./textos";
+import { IDIOMAS, NOMBRE_IDIOMA, t } from "./textos";
+import type { Idioma } from "./textos";
 
 interface Props {
   open: boolean;
@@ -39,6 +40,23 @@ export function SettingsPanel({ open, settings, onChange, onClose }: Props) {
         </header>
 
         <div className="mapper-body">
+          <label className="settings-field">
+            <span className="settings-label">{t("settings.idioma")}</span>
+            <select
+              value={settings.idioma}
+              onChange={(event) =>
+                onChange({ ...settings, idioma: event.target.value as Idioma })
+              }
+              title={t("settings.idiomaTooltip")}
+            >
+              {IDIOMAS.map((codigo) => (
+                <option key={codigo} value={codigo}>
+                  {NOMBRE_IDIOMA[codigo]}
+                </option>
+              ))}
+            </select>
+          </label>
+
           <label className="check">
             <input
               type="checkbox"

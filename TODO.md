@@ -5,13 +5,6 @@ los hitos del plan en [SPEC.md](SPEC.md); aquí solo lo que falta.
 
 ## Producto
 
-- [ ] **Completar la i18n** (la preparación está hecha). Falta el diccionario en
-      inglés, el selector de idioma en Ajustes, guardar la preferencia, ajustar
-      el `lang` del documento y formatear fechas y números con `Intl` en el
-      idioma activo (hoy son fijos: `toLocaleString("es-ES")` en `App.tsx` y
-      `formatDate`/`formatClock` en `types.ts`, que construyen la cadena a mano).
-      Lo demás ya está: todo el texto sale de `src/textos.ts` y los errores del
-      núcleo viajan por código.
 - [ ] **Instalador NSIS**. `bundle.active` sigue en `false`, así que se
       distribuye un `.exe` suelto: sin instalador, sin acceso directo y con el
       aviso de SmartScreen por delante. Activarlo con `targets: ["nsis"]` y

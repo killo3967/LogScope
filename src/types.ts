@@ -1,3 +1,5 @@
+import { idiomaDelSistema, type Idioma } from "./textos";
+
 export type Level =
   | "trace"
   | "debug"
@@ -230,6 +232,8 @@ export interface LastOpen {
 }
 
 export interface Settings {
+  /** Idioma de la interfaz. */
+  idioma: Idioma;
   rememberLastOpened: boolean;
   lastOpen: LastOpen | null;
   /** Arrancar y abrir cada log con el tail en vivo ya en marcha. */
@@ -239,6 +243,7 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
+  idioma: idiomaDelSistema(),
   rememberLastOpened: true,
   lastOpen: null,
   // Por defecto se mantiene el comportamiento de siempre: sin tail y con

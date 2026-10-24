@@ -11,12 +11,22 @@ Mientras la versión mayor sea `0`, la parte menor puede romper compatibilidad:
 
 ### Añadido
 
+- La interfaz está **traducida a seis idiomas** —castellano, inglés, francés,
+  italiano, alemán y portugués— con un selector en **Ajustes → Idioma**. El
+  idioma se guarda con el resto de preferencias y, la primera vez, se toma del
+  sistema si es uno de los disponibles. Los números del pie de estado se
+  formatean con el idioma activo; las columnas de fecha y hora siguen en formato
+  ISO a propósito, porque tienen que ordenar y mantener el ancho.
 - Licencia **MIT** (`LICENSE`) y sección de licencia en el README: hasta ahora el
   código se publicaba sin condiciones de uso.
 
 ## [0.2.1] - 2026-10-24
 
 ### Cambiado
+
+- El panel **Propiedades del fichero** recarga el log al cambiar la codificación,
+  sin esperar al botón de aplicar: corregir una lectura mal decodificada se ve al
+  instante. El formato sigue aplicándose con el botón.
 
 - Los textos de la interfaz salen de un catálogo central (`src/textos.ts`) y los
   errores del núcleo viajan por código en lugar de como frases hechas. De cara a

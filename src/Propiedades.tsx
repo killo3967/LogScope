@@ -48,12 +48,15 @@ interface Props {
   onClose: () => void;
   onColumns: () => void;
   onApply: (opciones: OpcionesApertura) => void;
+  /** Cambiar la codificación recarga al momento, sin cerrar el panel. */
+  onApplyEncoding: (opciones: OpcionesApertura) => void;
 }
 
 /**
  * Propiedades del fichero abierto: arriba lo que detectó el núcleo y abajo los
- * controles para volver a abrirlo con otro formato o codificación. Nada de
- * aquí recarga solo: el botón «Aplicar y recargar» es el único que lo hace.
+ * controles para volver a abrirlo con otro formato o codificación. El formato se
+ * aplica con el botón «Aplicar y recargar»; la codificación recarga sola, que es
+ * lo que se espera al corregir una lectura mal decodificada.
  */
 export function Propiedades({
   open,
@@ -71,6 +74,7 @@ export function Propiedades({
   onClose,
   onColumns,
   onApply,
+  onApplyEncoding,
 }: Props) {
   const [parserDraft, setParserDraft] = useState<ParserKind>(parser);
   const [patternDraft, setPatternDraft] = useState(pattern);
@@ -186,9 +190,16 @@ export function Propiedades({
               <span className="props-label">{t("props.codificacion")}</span>
               <select
                 value={encodingDraft}
-                onChange={(event) =>
-                  setEncodingDraft(event.target.value as EncodingKind)
-                }
+                onChange={(event) => {
+                  const siguiente = event.target.value as EncodingKind;
+                  setEncodingDraft(siguiente);
+                  onApplyEncoding({
+                    parser: parserDraft,
+                    pattern: patternDraft,
+                    delimiter: delimiterDraft,
+                    encoding: siguiente,
+                  });
+                }}
                 title={t("props.codificacionTooltip")}
               >
                 {ENCODINGS.map((option) => (

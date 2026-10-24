@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 
 import { ColumnMapper } from "./ColumnMapper";
+import { setIdioma, useIdioma } from "./textos";
 import { FileBrowser } from "./FileBrowser";
 import { HighlightRules, PALETTE } from "./HighlightRules";
 import { LogGrid } from "./LogGrid";
@@ -81,6 +82,13 @@ export default function App() {
     // que el usuario nunca toco.
     ...loadStored<Partial<Settings>>(SETTINGS_KEY, {}),
   }));
+  // El idioma vive en un almacén de módulo para que `t()` no necesite props; el
+  // hook solo sirve para volver a pintar cuando cambia.
+  const idioma = useIdioma();
+  useLayoutEffect(() => {
+    setIdioma(settings.idioma);
+  }, [settings.idioma]);
+
   const [autoScroll, setAutoScroll] = useState(settings.startWithAutoScroll);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -302,14 +310,14 @@ export default function App() {
   // con su parser, patrón, delimitador y codificación. Es la única vía que
   // recarga al cambiar de codificación; el selector de la barra ya no existe.
   const handleApplyOptions = useCallback(
-    (opciones: OpcionesApertura) => {
+    (opciones: OpcionesApertura, cerrarPanel = true) => {
       if (!active) return;
       const pestaña = active;
       setParser(opciones.parser);
       setPattern(opciones.pattern);
       setDelimiter(opciones.delimiter);
       setEncoding(opciones.encoding);
-      setPropsOpen(false);
+      if (cerrarPanel) setPropsOpen(false);
       void (async () => {
         await closeTab(pestaña.id);
         await openPaths(pestaña.paths, pestaña.mapping, opciones);
@@ -780,7 +788,8 @@ export default function App() {
           setPropsOpen(false);
           setMapperOpen(true);
         }}
-        onApply={handleApplyOptions}
+        onApply={(opciones) => handleApplyOptions(opciones)}
+        onApplyEncoding={(opciones) => handleApplyOptions(opciones, false)}
       />
 
       <ColumnMapper
@@ -857,7 +866,7 @@ export default function App() {
         <span>{active ? active.session.parser : t("status.sinSesion")}</span>
         <span>
           {t("status.lineas", {
-            total: active ? active.total.toLocaleString("es-ES") : 0,
+            total: active ? active.total.toLocaleString(idioma) : 0,
           })}
           {active?.session.merged
             ? t("status.ficheros", { total: active.session.sources.length })
