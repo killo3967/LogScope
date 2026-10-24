@@ -279,6 +279,25 @@ persistencia va al final, cuando ya exista todo lo que hay que recordar.
       faltan líneas; hace falta un indicador visible y una forma clara de
       limpiarla.
 
+- [ ] **Exportar con diálogo y varios formatos**. Hoy la exportación escribe
+      `<nombre>-seleccion.txt` junto al log, sin preguntar nada. Debe abrir un
+      diálogo que pida **ruta, nombre y tipo de fichero**, y antes hay que
+      **estudiar qué formatos** tiene sentido generar además de texto plano:
+      - **CSV / TSV** con las columnas del grid y cabecera. Ojo con el escapado de
+        comillas, separadores y saltos de línea dentro de un campo (un registro de
+        varias líneas rompería el fichero).
+      - **JSON**: una entrada por objeto, con sus campos y el número de línea.
+      - **`.log` filtrado**: solo las líneas de la selección, tal cual, para
+        reabrirlas en otro sitio.
+      - Decisiones que salen de ahí: qué separador y qué codificación (UTF-8 con
+        BOM para que Excel abra bien los acentos), si el CSV respeta el orden de la
+        selección o el del fichero, y si se respeta el mapeo de columnas activo.
+      - Para el diálogo hace falta `tauri-plugin-dialog`: **dependencia nueva, hay
+        que autorizarla**. Alternativa sin dependencia: formulario propio con ruta
+        escrita a mano y tipo elegido en un desplegable.
+      - El contenido debe generarse en el **núcleo**, que es quien tiene las filas,
+        y no en la interfaz.
+
 ## Publicación
 
 - [ ] **Traducir la documentación al inglés**. Orden recomendado: `README.md` en
