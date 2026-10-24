@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 
 import { ColumnMapper } from "./ColumnMapper";
 import { FileBrowser } from "./FileBrowser";
@@ -10,7 +11,15 @@ import { SelectionMenu } from "./SelectionMenu";
 import { SettingsPanel } from "./Settings";
 import { TabMenu } from "./TabMenu";
 import { Toolbar } from "./Toolbar";
-import type { Filters, HighlightRule, OpenResult, ParserKind, Settings, Stats } from "./types";
+import type {
+  EncodingKind,
+  Filters,
+  HighlightRule,
+  OpenResult,
+  ParserKind,
+  Settings,
+  Stats,
+} from "./types";
 import { ALL_LEVELS, DEFAULT_SETTINGS, formatBytes, sourceKey } from "./types";
 
 const WIDTHS_KEY = "logscope.columnWidths.v1";
@@ -53,6 +62,7 @@ export default function App() {
     "^(?P<ts>\\S+ \\S+) (?P<level>\\w+) (?P<Message>.*)$",
   );
   const [delimiter, setDelimiter] = useState(",");
+  const [encoding, setEncoding] = useState<EncodingKind>("auto");
 
   const [tabs, setTabs] = useState<Tab[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -68,6 +78,9 @@ export default function App() {
   const [autoScroll, setAutoScroll] = useState(settings.startWithAutoScroll);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Archivos arrastrados sobre la ventana: se muestra una capa para indicar
+  // que se pueden soltar, mientras el usuario mantiene el botón pulsado.
+  const [dropActive, setDropActive] = useState(false);
   const [browserOpen, setBrowserOpen] = useState(false);
   const [mapperOpen, setMapperOpen] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
@@ -126,12 +139,18 @@ export default function App() {
       mappingToUse: string[] | null,
       // Al reabrir al arrancar hay que usar las opciones con las que se abrió,
       // no las que tenga el estado ahora mismo.
-      override?: { parser: ParserKind; pattern: string; delimiter: string },
+      override?: {
+        parser: ParserKind;
+        pattern: string;
+        delimiter: string;
+        encoding?: EncodingKind;
+      },
     ) => {
       if (targets.length === 0) return;
       const parserToUse = override?.parser ?? parser;
       const patternToUse = override?.pattern ?? pattern;
       const delimiterToUse = override?.delimiter ?? delimiter;
+      const encodingToUse = override?.encoding ?? encoding;
       setBusy(true);
       setError(null);
       try {
@@ -143,6 +162,7 @@ export default function App() {
             pattern: parserToUse === "pattern" ? patternToUse : null,
             delimiter: parserToUse === "dsv" ? delimiterToUse : null,
             mapping: mappingToUse,
+            encoding: encodingToUse,
           },
         });
 
@@ -191,6 +211,7 @@ export default function App() {
             pattern: patternToUse,
             delimiter: delimiterToUse,
             mapping,
+            encoding: encodingToUse,
           },
         }));
       } catch (cause) {
@@ -199,8 +220,57 @@ export default function App() {
         setBusy(false);
       }
     },
-    [parser, pattern, delimiter, settings.startWithTail, settings.startWithAutoScroll],
+    [
+      parser,
+      pattern,
+      delimiter,
+      encoding,
+      settings.startWithTail,
+      settings.startWithAutoScroll,
+    ],
   );
+
+  // Arrastrar un fichero del explorador de Windows sobre la ventana lo abre.
+  // Tauri entrega las rutas absolutas en el evento nativo del webview; leerlas
+  // desde `dataTransfer.files` no serviría: WebView2 no expone la ruta del
+  // fichero por seguridad.
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let cancelado = false;
+
+    void getCurrentWebview()
+      .onDragDropEvent((event) => {
+        const payload = event.payload;
+        if (payload.type === "over") return;
+        if (payload.type === "enter") {
+          setDropActive(true);
+          return;
+        }
+
+        setDropActive(false);
+        if (payload.type !== "drop" || payload.paths.length === 0) return;
+
+        // Una pestaña por fichero y en serie, igual que al abrir varios desde
+        // el navegador: el orden de las pestañas es el de los ficheros.
+        void (async () => {
+          for (const ruta of payload.paths) {
+            await openPaths([ruta], null);
+          }
+        })();
+      })
+      .then((fn) => {
+        if (cancelado) fn();
+        else unlisten = fn;
+      })
+      .catch(() => {
+        // Sin eventos de arrastre quedan Examinar… y escribir la ruta a mano.
+      });
+
+    return () => {
+      cancelado = true;
+      unlisten?.();
+    };
+  }, [openPaths]);
 
   const closeTab = useCallback(
     async (id: string) => {
@@ -217,6 +287,29 @@ export default function App() {
       setSelectedTabs((previous) => previous.filter((selectedId) => selectedId !== id));
     },
     [activeId],
+  );
+
+  // Cambiar la codificación recarga el log abierto: el selector sirve para
+  // corregir lo que se está viendo, no solo para la próxima apertura. Se
+  // reabre con el parser y el mapeo que ya tenía esa pestaña.
+  const handleEncodingChange = useCallback(
+    (siguiente: EncodingKind) => {
+      setEncoding(siguiente);
+      if (!active) return;
+
+      const pestaña = active;
+      const parserActual = pestaña.session.parser as ParserKind;
+      void (async () => {
+        await closeTab(pestaña.id);
+        await openPaths(pestaña.paths, pestaña.mapping, {
+          parser: parserActual,
+          pattern,
+          delimiter,
+          encoding: siguiente,
+        });
+      })();
+    },
+    [active, closeTab, openPaths, pattern, delimiter],
   );
 
   const handleToggleTail = useCallback(async () => {
@@ -331,12 +424,21 @@ export default function App() {
       setRulesBySource((previous) => {
         const actuales = previous[destino] ?? [];
         // Se añaden sin duplicar: si ya hay una regla con el mismo patrón,
-        // destino y modo, copiarla otra vez no aporta nada.
+        // destino y modo, copiarla otra vez no aporta nada. El modo incluye si
+        // distingue mayúsculas, que es una regla distinta.
         const huellas = new Set(
-          actuales.map((rule) => `${rule.target}|${rule.isRegex}|${rule.pattern}`),
+          actuales.map(
+            (rule) =>
+              `${rule.target}|${rule.isRegex}|${rule.caseSensitive === true}|${rule.pattern}`,
+          ),
         );
         const nuevas = (previous[origin] ?? [])
-          .filter((rule) => !huellas.has(`${rule.target}|${rule.isRegex}|${rule.pattern}`))
+          .filter(
+            (rule) =>
+              !huellas.has(
+                `${rule.target}|${rule.isRegex}|${rule.caseSensitive === true}|${rule.pattern}`,
+              ),
+          )
           .map((rule) => ({
             ...rule,
             id: `rule-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -396,7 +498,11 @@ export default function App() {
       setRulesBySource((previous) => {
         const actuales = previous[activeSource] ?? [];
         const yaExiste = actuales.some(
-          (rule) => rule.target === "word" && !rule.isRegex && rule.pattern === patron,
+          (rule) =>
+            rule.target === "word" &&
+            !rule.isRegex &&
+            rule.caseSensitive !== true &&
+            rule.pattern === patron,
         );
         if (yaExiste) return previous;
         return {
@@ -465,11 +571,22 @@ export default function App() {
 
   return (
     <div className="app">
+      {dropActive && (
+        <div className="drop-overlay">
+          <div className="drop-box">
+            <strong>Suelta el fichero para abrirlo</strong>
+            <span>Se abre en una pestaña nueva. Si sueltas varios, una por fichero.</span>
+          </div>
+        </div>
+      )}
       <Toolbar
         path={paths}
         onPathChange={setPaths}
         parser={parser}
         onParserChange={setParser}
+        encoding={encoding}
+        onEncodingChange={handleEncodingChange}
+        detectedEncoding={active?.session.encoding ?? null}
         pattern={pattern}
         onPatternChange={setPattern}
         delimiter={delimiter}

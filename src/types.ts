@@ -26,6 +26,8 @@ export interface Row {
 export interface OpenResult {
   session_id: string;
   parser: string;
+  /** Codificación con la que se ha leído, ya resuelta (`utf16le`, `cp850`…). */
+  encoding: string;
   entries: number;
   bytes: number;
   fields: string[];
@@ -42,6 +44,12 @@ export interface HighlightRule {
   isRegex: boolean;
   target: "row" | "word";
   color: string;
+  /**
+   * Distinguir mayúsculas y minúsculas. Opcional: las reglas guardadas antes
+   * de existir esta casilla llegan sin el campo y se comportan como antes
+   * (sin distinguir), que es donde estaban acostumbrados.
+   */
+  caseSensitive?: boolean;
 }
 
 export const COLUMN_WIDTHS: Record<string, number> = {
@@ -103,6 +111,51 @@ export type ParserKind =
   | "websphere"
   | "dsv"
   | "pattern";
+
+/**
+ * Codificación pedida al abrir. `auto` deja que el núcleo la deduzca; el resto
+ * la fuerza, que es la única salida cuando la detección no puede acertar: las
+ * páginas de un solo byte comparten los mismos bytes con significados
+ * distintos.
+ */
+export type EncodingKind =
+  | "auto"
+  | "utf8"
+  | "utf16le"
+  | "utf16be"
+  | "utf32le"
+  | "utf32be"
+  | "windows1252"
+  | "windows1250"
+  | "windows1251"
+  | "cp850"
+  | "cp437"
+  | "iso8859-15"
+  | "koi8-r"
+  | "shift_jis"
+  | "gbk"
+  | "big5"
+  | "euc-jp";
+
+export const ENCODINGS: { value: EncodingKind; label: string }[] = [
+  { value: "auto", label: "auto" },
+  { value: "utf8", label: "UTF-8" },
+  { value: "utf16le", label: "UTF-16 LE" },
+  { value: "utf16be", label: "UTF-16 BE" },
+  { value: "utf32le", label: "UTF-32 LE" },
+  { value: "utf32be", label: "UTF-32 BE" },
+  { value: "windows1252", label: "Windows-1252" },
+  { value: "windows1250", label: "Windows-1250" },
+  { value: "windows1251", label: "Windows-1251" },
+  { value: "cp850", label: "CP850 (consola)" },
+  { value: "cp437", label: "CP437 (DOS)" },
+  { value: "iso8859-15", label: "ISO-8859-15" },
+  { value: "koi8-r", label: "KOI8-R" },
+  { value: "shift_jis", label: "Shift-JIS" },
+  { value: "gbk", label: "GBK" },
+  { value: "big5", label: "Big5" },
+  { value: "euc-jp", label: "EUC-JP" },
+];
 
 export const LEVELS: Level[] = [
   "trace",
@@ -167,6 +220,8 @@ export interface LastOpen {
   pattern: string;
   delimiter: string;
   mapping: string[] | null;
+  /** Opcional: las recetas guardadas antes de existir la codificación no lo traen. */
+  encoding?: EncodingKind;
 }
 
 export interface Settings {

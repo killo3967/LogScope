@@ -43,6 +43,28 @@ body,
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Formato y codificación, agrupados a la derecha de la segunda fila para
+   despejar la primera, que lleva la ruta y los botones de apertura. */
+.toolbar-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.toolbar-right .field {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.toolbar-right .field-label {
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
 }
 
 input,
@@ -555,6 +577,33 @@ mark {
   width: min(880px, 94vw);
 }
 
+/* El panel de reglas es una ventana flotante: sin fondo que tape el log, para
+   poder mirar el resultado mientras se ajustan los patrones, y arrastrable por
+   la barra de titulo para apartarla de las filas que se estan coloreando. */
+.browser.rules.flotante {
+  position: fixed;
+  margin: 0;
+  height: auto;
+  max-height: 86vh;
+  /* Por debajo de las ventanas modales (50): si se abre el navegador de
+     ficheros mientras está abierto, el navegador queda encima. */
+  z-index: 45;
+}
+
+.browser.rules .browser-head.arrastrable {
+  cursor: grab;
+  user-select: none;
+  background: #1f242c;
+}
+
+.browser.rules .browser-head.arrastrable.arrastrando {
+  cursor: grabbing;
+}
+
+.rule-block {
+  margin-bottom: 6px;
+}
+
 .rule-row {
   display: flex;
   align-items: center;
@@ -565,6 +614,18 @@ mark {
   flex: 1;
   font-family: Consolas, "Cascadia Mono", monospace;
   font-size: 12px;
+}
+
+/* Regex que no compila: el campo se marca y el grid la ignora. */
+.rule-pattern.invalid {
+  border-color: #ef6b6b;
+  box-shadow: 0 0 0 1px #ef6b6b inset;
+}
+
+.rule-error {
+  margin-top: 3px;
+  font-size: 11px;
+  color: #ef6b6b;
 }
 
 .rule-row select {
@@ -582,6 +643,37 @@ mark {
 .rule-row button {
   flex: none;
   padding: 2px 8px;
+}
+
+/* ------------------------------------------- arrastrar un log sobre la app */
+
+/* Capa de aviso mientras se arrastra: no debe interceptar el puntero, o el
+   soltar no llegaría al webview. */
+.drop-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  background: rgba(6, 8, 11, 0.55);
+  pointer-events: none;
+}
+
+.drop-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 26px 34px;
+  border: 2px dashed var(--accent);
+  border-radius: 10px;
+  background: rgba(20, 22, 26, 0.92);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5);
+}
+
+.drop-box span {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 /* ------------------------------------------- numeracion de fila y seleccion */

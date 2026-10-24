@@ -78,23 +78,26 @@ export function LogGrid({
         let regex: RegExp | null = null;
         if (rule.isRegex) {
           try {
-            regex = new RegExp(rule.pattern, "gi");
+            // La `i` solo se añade si la regla no pide distinguir mayúsculas.
+            regex = new RegExp(rule.pattern, rule.caseSensitive ? "g" : "gi");
           } catch {
             regex = null;
           }
         }
-        return { rule, regex };
+        // Aguja ya normalizada para la búsqueda literal, que no pasa por regex.
+        const needle = rule.caseSensitive ? rule.pattern : rule.pattern.toLowerCase();
+        return { rule, regex, needle };
       })
       .filter((entry) => !entry.rule.isRegex || entry.regex !== null);
   }, [rules]);
 
   const rowColor = useCallback(
     (row: Row): string | undefined => {
-      for (const { rule, regex } of compiled) {
+      for (const { rule, regex, needle } of compiled) {
         if (rule.target !== "row") continue;
         const hit = regex
           ? ((regex.lastIndex = 0), regex.test(row.raw))
-          : row.raw.toLowerCase().includes(rule.pattern.toLowerCase());
+          : (rule.caseSensitive ? row.raw : row.raw.toLowerCase()).includes(needle);
         if (hit) return rule.color;
       }
       return undefined;
@@ -109,7 +112,7 @@ export function LogGrid({
       const wordRules = compiled.filter((entry) => entry.rule.target === "word");
       if (wordRules.length === 0 || text === "") return { segments: [{ text, hit: false }] };
 
-      for (const { rule, regex } of wordRules) {
+      for (const { rule, regex, needle } of wordRules) {
         const segments: Segment[] = [];
         if (regex) {
           regex.lastIndex = 0;
@@ -124,8 +127,7 @@ export function LogGrid({
           if (segments.length === 0) continue;
           if (last < text.length) segments.push({ text: text.slice(last), hit: false });
         } else {
-          const needle = rule.pattern.toLowerCase();
-          const haystack = text.toLowerCase();
+          const haystack = rule.caseSensitive ? text : text.toLowerCase();
           let index = haystack.indexOf(needle);
           if (index === -1) continue;
           let last = 0;
