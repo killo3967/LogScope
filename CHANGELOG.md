@@ -9,6 +9,8 @@ Mientras la versión mayor sea `0`, la parte menor puede romper compatibilidad:
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-24
+
 ### Añadido
 
 - **Detección estadística de codificación** (`chardetng`, el detector de
@@ -87,5 +89,6 @@ navegar por ellos y combinarlos.
 - El empaquetado NSIS está pendiente: `bundle.active` sigue en `false` y el
   binario se distribuye como ejecutable suelto.
 
-[Unreleased]: https://github.com/killo3967/LogScope/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/killo3967/LogScope/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/killo3967/LogScope/releases/tag/v0.2.0
 [0.1.0]: https://github.com/killo3967/LogScope/releases/tag/v0.1.0
