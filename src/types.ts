@@ -140,7 +140,7 @@ export type EncodingKind =
 /**
  * Codificaciones ofrecidas en el desplegable, en orden. Aquí solo va el valor
  * que entiende el núcleo; los nombres visibles están en el catálogo de textos
- * (`toolbar.encoding.<valor>`).
+ * (`props.encoding.<valor>`).
  */
 export const ENCODINGS: EncodingKind[] = [
   "auto",

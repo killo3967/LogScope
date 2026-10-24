@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
@@ -7,6 +8,9 @@ import { ColumnMapper } from "./ColumnMapper";
 import { FileBrowser } from "./FileBrowser";
 import { HighlightRules, PALETTE } from "./HighlightRules";
 import { LogGrid } from "./LogGrid";
+import { useMenuApp } from "./MenuApp";
+import { Propiedades } from "./Propiedades";
+import type { OpcionesApertura } from "./Propiedades";
 import { SelectionMenu } from "./SelectionMenu";
 import { SettingsPanel } from "./Settings";
 import { TabMenu } from "./TabMenu";
@@ -84,6 +88,9 @@ export default function App() {
   // que se pueden soltar, mientras el usuario mantiene el botón pulsado.
   const [dropActive, setDropActive] = useState(false);
   const [browserOpen, setBrowserOpen] = useState(false);
+  const [propsOpen, setPropsOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
+  const [version, setVersion] = useState<string | null>(null);
   const [mapperOpen, setMapperOpen] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -291,27 +298,24 @@ export default function App() {
     [activeId],
   );
 
-  // Cambiar la codificación recarga el log abierto: el selector sirve para
-  // corregir lo que se está viendo, no solo para la próxima apertura. Se
-  // reabre con el parser y el mapeo que ya tenía esa pestaña.
-  const handleEncodingChange = useCallback(
-    (siguiente: EncodingKind) => {
-      setEncoding(siguiente);
+  // Aplicar las opciones elegidas en Propiedades: se reabre la pestaña activa
+  // con su parser, patrón, delimitador y codificación. Es la única vía que
+  // recarga al cambiar de codificación; el selector de la barra ya no existe.
+  const handleApplyOptions = useCallback(
+    (opciones: OpcionesApertura) => {
       if (!active) return;
-
       const pestaña = active;
-      const parserActual = pestaña.session.parser as ParserKind;
+      setParser(opciones.parser);
+      setPattern(opciones.pattern);
+      setDelimiter(opciones.delimiter);
+      setEncoding(opciones.encoding);
+      setPropsOpen(false);
       void (async () => {
         await closeTab(pestaña.id);
-        await openPaths(pestaña.paths, pestaña.mapping, {
-          parser: parserActual,
-          pattern,
-          delimiter,
-          encoding: siguiente,
-        });
+        await openPaths(pestaña.paths, pestaña.mapping, opciones);
       })();
     },
-    [active, closeTab, openPaths, pattern, delimiter],
+    [active, closeTab, openPaths],
   );
 
   const handleToggleTail = useCallback(async () => {
@@ -569,6 +573,49 @@ export default function App() {
     window.print();
   }, []);
 
+  // La versión se pide al abrir el diálogo, no al arrancar: si el comando no
+  // está disponible, el «Acerca de» se queda sin versión y ya está.
+  useEffect(() => {
+    if (!aboutOpen) return;
+    let vigente = true;
+    setVersion(null);
+    getVersion()
+      .then((valor) => {
+        if (vigente) setVersion(valor);
+      })
+      .catch(() => {
+        /* se muestra «versión no disponible» */
+      });
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setAboutOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      vigente = false;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [aboutOpen]);
+
+  useMenuApp({
+    hayUltimo: settings.lastOpen !== null,
+    hayPestana: !!active,
+    tailing: active?.tailing ?? false,
+    tailEnabled: !!active && !active.session.merged,
+    autoScroll,
+    onAbrir: () => setBrowserOpen(true),
+    onReabrirUltimo: () => {
+      const receta = settings.lastOpen;
+      if (receta) void openPaths(receta.paths, receta.mapping, receta);
+    },
+    onToggleTail: () => void handleToggleTail(),
+    onToggleAutoScroll: () => setAutoScroll((previous) => !previous),
+    onRecargar: () => void reloadUi(),
+    onPropiedades: () => setPropsOpen(true),
+    onReglas: () => setRulesOpen(true),
+    onAjustes: () => setSettingsOpen(true),
+    onAcercaDe: () => setAboutOpen(true),
+  });
+
   return (
     <div className="app">
       {dropActive && (
@@ -582,21 +629,10 @@ export default function App() {
       <Toolbar
         path={paths}
         onPathChange={setPaths}
-        parser={parser}
-        onParserChange={setParser}
-        encoding={encoding}
-        onEncodingChange={handleEncodingChange}
-        detectedEncoding={active?.session.encoding ?? null}
-        pattern={pattern}
-        onPatternChange={setPattern}
-        delimiter={delimiter}
-        onDelimiterChange={setDelimiter}
         onOpen={() => void openPaths([paths], null)}
         onBrowse={() => setBrowserOpen(true)}
-        onColumns={() => setMapperOpen(true)}
-        columnsEnabled={!busy && !!active && active.session.sample_lines.length > 1}
-        onRules={() => setRulesOpen(true)}
-        rulesCount={activeRules.length}
+        onProperties={() => setPropsOpen(true)}
+        propertiesEnabled={!!active}
         mask={active?.mask ?? ALL_LEVELS}
         onMaskChange={(value) => active && updateTab(active.id, { mask: value })}
         text={active?.text ?? ""}
@@ -606,7 +642,9 @@ export default function App() {
         onToggleTail={handleToggleTail}
         autoScroll={autoScroll}
         onAutoScrollChange={setAutoScroll}
-        onSettings={() => setSettingsOpen(true)}
+        onRules={() => setRulesOpen(true)}
+        onReload={() => void reloadUi()}
+        onPrint={printUi}
         busy={busy}
         disabled={!active}
       />
@@ -722,6 +760,29 @@ export default function App() {
         }}
       />
 
+      <Propiedades
+        open={propsOpen}
+        paths={active?.paths ?? []}
+        bytes={active?.session.bytes ?? 0}
+        lines={active?.total ?? 0}
+        detectedParser={active?.session.parser ?? null}
+        detectedEncoding={active?.session.encoding ?? null}
+        parser={parser}
+        pattern={pattern}
+        delimiter={delimiter}
+        encoding={encoding}
+        columnsEnabled={!busy && !!active && active.session.sample_lines.length > 1}
+        busy={busy}
+        onClose={() => setPropsOpen(false)}
+        onColumns={() => {
+          // Un solo panel a la vez: el mapeo se abre encima de la rejilla y, al
+          // aplicar, ya reabre la pestaña con las opciones vigentes.
+          setPropsOpen(false);
+          setMapperOpen(true);
+        }}
+        onApply={handleApplyOptions}
+      />
+
       <ColumnMapper
         open={mapperOpen}
         sampleLines={active?.session.sample_lines ?? []}
@@ -762,6 +823,35 @@ export default function App() {
         onChange={setSettings}
         onClose={() => setSettingsOpen(false)}
       />
+
+      {aboutOpen && (
+        <div className="browser-backdrop" onClick={() => setAboutOpen(false)}>
+          <div
+            className="browser about"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header className="browser-head">
+              <strong>{t("about.titulo")}</strong>
+              <span className="hint" />
+            </header>
+            <div className="mapper-body about-body">
+              <div className="about-name">LogScope</div>
+              <div className="about-version">
+                {version
+                  ? t("about.version", { version })
+                  : t("about.sinVersion")}
+              </div>
+              <p className="about-text">{t("about.descripcion")}</p>
+            </div>
+            <footer className="browser-foot">
+              <span className="selected-path" />
+              <button className="primary" onClick={() => setAboutOpen(false)}>
+                {t("about.cerrar")}
+              </button>
+            </footer>
+          </div>
+        </div>
+      )}
 
       <footer className="status">
         <span>{active ? active.session.parser : t("status.sinSesion")}</span>

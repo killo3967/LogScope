@@ -4,8 +4,8 @@
  * Es plano y serializable a propósito: solo cadenas, sin funciones ni JSX, para
  * que se pueda volcar a JSON o cargar desde otro idioma sin tocar los
  * componentes. Las claves llevan el espacio de nombres de la zona de la interfaz
- * (`app.`, `toolbar.`, `grid.`, `browser.`, `cols.`, `rules.`, `settings.`,
- * `tab.`, `sel.`, `status.`, `error.`).
+ * (`app.`, `menu.`, `toolbar.`, `props.`, `about.`, `grid.`, `browser.`, `cols.`,
+ * `rules.`, `settings.`, `tab.`, `sel.`, `status.`, `error.`).
  *
  * Los marcadores `{nombre}` se sustituyen con los parámetros de `t`. Si falta un
  * parámetro, el marcador se deja tal cual; los parámetros de más se ignoran.
@@ -21,52 +21,89 @@ const ES = {
   "app.tailMerged":
     "El tail en vivo solo está disponible con un único fichero: en una vista combinada el orden se recalcularía en cada línea.",
 
+  // Menú de aplicación. Se construye desde la interfaz para que los rótulos
+  // salgan de este catálogo; los ítems nativos no traducen nada por su cuenta.
+  "menu.archivo": "Archivo",
+  "menu.ver": "Ver",
+  "menu.herramientas": "Herramientas",
+  "menu.ayuda": "Ayuda",
+  "menu.abrir": "Abrir…",
+  "menu.reabrirUltimo": "Reabrir último log",
+  "menu.salir": "Salir",
+  "menu.tailEnVivo": "Tail en vivo",
+  "menu.autoscroll": "Autoscroll",
+  "menu.propiedades": "Propiedades del fichero…",
+  "menu.reglas": "Reglas de color…",
+  "menu.ajustes": "Ajustes…",
+  "menu.acercaDe": "Acerca de LogScope",
+
   // Barra de herramientas.
   "toolbar.rutaPlaceholder": "C:\\ruta\\al\\fichero.log",
   "toolbar.examinarTooltip": "Navegar por el árbol de directorios",
   "toolbar.examinar": "Examinar…",
   "toolbar.abriendo": "Abriendo…",
   "toolbar.abrir": "Abrir",
-  "toolbar.columnasTooltip": "Asignar cada línea del registro a su columna",
-  "toolbar.columnas": "Columnas…",
+  "toolbar.propiedades": "Propiedades",
+  "toolbar.mas": "⋯",
+  "toolbar.masTooltip": "Más acciones",
   "toolbar.reglasTooltip": "Colorear filas o palabras según un patrón",
-  "toolbar.reglas": "Reglas",
-  "toolbar.reglasN": "Reglas ({n})",
   "toolbar.reglasVacio": "Reglas…",
+  "toolbar.tailEtiqueta": "tail",
+  "toolbar.autoscrollEtiqueta": "auto",
   "toolbar.tailSeguirTooltip": "Seguir el fichero en vivo",
+  "toolbar.tailDetenerTooltip": "Detener el tail en vivo",
   "toolbar.tailNoDisponibleTooltip": "No disponible al combinar varios ficheros",
-  "toolbar.detenerTail": "Detener tail",
-  "toolbar.tailEnVivo": "Tail en vivo",
-  "toolbar.autoscroll": "Autoscroll",
-  "toolbar.ajustesTooltip": "Ajustes",
+  "toolbar.autoscrollActivarTooltip": "Activar el autoscroll",
+  "toolbar.autoscrollDesactivarTooltip": "Desactivar el autoscroll",
   "toolbar.filtroPlaceholder": "Filtrar por texto…",
-  "toolbar.delimitadorTooltip": "Delimitador",
-  "toolbar.patronTooltip": "Regex con grupos con nombre",
-  "toolbar.formato": "Formato",
-  "toolbar.formatoTooltip": "Cómo interpretar cada línea del fichero",
-  "toolbar.codificacion": "Codificación",
-  "toolbar.codificacionDetectadaTooltip": "Detectada en el log abierto: {encoding}",
-  "toolbar.codificacionTooltip": "Codificación de los bytes del fichero",
+
+  // Panel de propiedades del fichero: lo detectado (solo lectura) y los
+  // controles con los que se vuelve a abrir.
+  "props.titulo": "Propiedades del fichero",
+  "props.rutas": "Rutas",
+  "props.tamano": "Tamaño",
+  "props.lineas": "Líneas",
+  "props.parserDetectado": "Parser detectado",
+  "props.codificacionDetectada": "Codificación detectada",
+  "props.formato": "Formato",
+  "props.formatoTooltip": "Cómo interpretar cada línea del fichero",
+  "props.delimitador": "Delimitador",
+  "props.delimitadorTooltip": "Delimitador",
+  "props.patron": "Patrón",
+  "props.patronTooltip": "Regex con grupos con nombre",
+  "props.codificacion": "Codificación",
+  "props.codificacionTooltip": "Codificación de los bytes del fichero",
+  "props.columnas": "Columnas…",
+  "props.columnasTooltip": "Asignar cada línea del registro a su columna",
+  "props.cerrar": "Cerrar",
+  "props.aplicar": "Aplicar y recargar",
 
   // Nombres visibles de las codificaciones. El valor de la opción sigue en
   // `types.ts`: aquí solo va lo que se lee en el desplegable.
-  "toolbar.encoding.auto": "auto",
-  "toolbar.encoding.utf8": "UTF-8",
-  "toolbar.encoding.utf16le": "UTF-16 LE",
-  "toolbar.encoding.utf16be": "UTF-16 BE",
-  "toolbar.encoding.utf32le": "UTF-32 LE",
-  "toolbar.encoding.utf32be": "UTF-32 BE",
-  "toolbar.encoding.windows1252": "Windows-1252",
-  "toolbar.encoding.windows1250": "Windows-1250",
-  "toolbar.encoding.windows1251": "Windows-1251",
-  "toolbar.encoding.cp850": "CP850 (consola)",
-  "toolbar.encoding.cp437": "CP437 (DOS)",
-  "toolbar.encoding.iso8859-15": "ISO-8859-15",
-  "toolbar.encoding.koi8-r": "KOI8-R",
-  "toolbar.encoding.shift_jis": "Shift-JIS",
-  "toolbar.encoding.gbk": "GBK",
-  "toolbar.encoding.big5": "Big5",
-  "toolbar.encoding.euc-jp": "EUC-JP",
+  "props.encoding.auto": "auto",
+  "props.encoding.utf8": "UTF-8",
+  "props.encoding.utf16le": "UTF-16 LE",
+  "props.encoding.utf16be": "UTF-16 BE",
+  "props.encoding.utf32le": "UTF-32 LE",
+  "props.encoding.utf32be": "UTF-32 BE",
+  "props.encoding.windows1252": "Windows-1252",
+  "props.encoding.windows1250": "Windows-1250",
+  "props.encoding.windows1251": "Windows-1251",
+  "props.encoding.cp850": "CP850 (consola)",
+  "props.encoding.cp437": "CP437 (DOS)",
+  "props.encoding.iso8859-15": "ISO-8859-15",
+  "props.encoding.koi8-r": "KOI8-R",
+  "props.encoding.shift_jis": "Shift-JIS",
+  "props.encoding.gbk": "GBK",
+  "props.encoding.big5": "Big5",
+  "props.encoding.euc-jp": "EUC-JP",
+
+  // Diálogo «Acerca de».
+  "about.titulo": "Acerca de LogScope",
+  "about.version": "Versión {version}",
+  "about.sinVersion": "Versión no disponible",
+  "about.descripcion": "Visor de registros de log para Windows.",
+  "about.cerrar": "Cerrar",
 
   // Rejilla de entradas.
   "grid.numeroLineaTooltip": "Número de línea en el fichero",
@@ -134,7 +171,7 @@ const ES = {
     "Al abrir un log, empieza a seguirlo solo. No se aplica a las vistas combinadas, donde el orden se recalcularía en cada línea.",
   "settings.iniciarAutoscroll": "Iniciar con el autoscroll activo",
   "settings.notaAutoscroll":
-    "Se aplica al arrancar y al abrir cada log. Puedes desmarcarlo en cualquier momento con la casilla de la barra o moviendo la rueda hacia arriba.",
+    "Se aplica al arrancar y al abrir cada log. Puedes desactivarlo en cualquier momento con el interruptor de la barra o moviendo la rueda hacia arriba.",
   "settings.ultimos": "Últimos logs recordados",
   "settings.parser": "Parser {parser}",
   "settings.columnasForzadas": " · {n} columnas forzadas",

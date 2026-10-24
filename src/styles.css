@@ -46,25 +46,12 @@ body,
   flex-wrap: wrap;
 }
 
-/* Formato y codificación, agrupados a la derecha de la segunda fila para
-   despejar la primera, que lleva la ruta y los botones de apertura. */
+/* A la derecha de la segunda fila: el botón de más acciones. */
 .toolbar-right {
   margin-left: auto;
   display: flex;
   align-items: center;
   gap: 10px;
-}
-
-.toolbar-right .field {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.toolbar-right .field-label {
-  color: var(--muted);
-  font-size: 11px;
-  white-space: nowrap;
 }
 
 input,
@@ -137,6 +124,67 @@ button.active {
 
 .chip.off {
   opacity: 0.35;
+}
+
+/* Interruptores de Tail y Autoscroll: glifo identificativo y pista con bolita. */
+.toolbar button.toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  background: #23272f;
+}
+
+.toggle-label {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.toggle.on .toggle-label {
+  color: var(--fg);
+}
+
+.toggle-icon {
+  font-size: 11px;
+  line-height: 1;
+  color: var(--muted);
+}
+
+button.toggle.on .toggle-icon {
+  color: var(--accent);
+}
+
+.toggle-track {
+  position: relative;
+  width: 26px;
+  height: 14px;
+  border-radius: 7px;
+  background: var(--line);
+  transition: background 0.12s ease;
+}
+
+.toggle-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: transform 0.12s ease, background 0.12s ease;
+}
+
+button.toggle.on .toggle-track {
+  background: rgba(76, 154, 255, 0.35);
+}
+
+button.toggle.on .toggle-knob {
+  transform: translateX(12px);
+  background: var(--accent);
+}
+
+button.toggle:disabled .toggle-track {
+  opacity: 0.5;
 }
 
 /* ---------------------------------------------------------------- grid */
@@ -748,6 +796,18 @@ mark {
   line-height: 1;
 }
 
+/* El botón «⋯» necesita algo más de cuerpo que un icono de una letra. */
+.toolbar button.mas {
+  font-size: 16px;
+  line-height: 1;
+}
+
+/* Menú de «⋯»: cuelga del botón para no tener que perseguirlo. */
+.toolbar-menu {
+  min-width: 200px;
+  max-width: 240px;
+}
+
 /* Cabeceras centradas en el ancho de su columna. Las celdas de datos siguen a
    la izquierda: centrar un mensaje largo haria ilegible el grid. */
 .col-head {
@@ -760,6 +820,98 @@ mark {
   color: var(--muted);
   font-size: 11px;
   max-width: 52ch;
+}
+
+/* ------------------------------------------ propiedades del fichero */
+
+.browser.props {
+  width: min(620px, 94vw);
+  height: auto;
+  max-height: 86vh;
+}
+
+.props-info {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 6px 14px;
+  margin: 0;
+}
+
+.props-label {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  white-space: nowrap;
+  padding-top: 2px;
+}
+
+.props-value {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+
+.props-paths {
+  margin: 0;
+  padding-left: 16px;
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.props-paths li {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.props-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.props-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.props-field-wide {
+  flex: 1;
+  min-width: 240px;
+}
+
+/* ------------------------------------------------------- acerca de */
+
+.browser.about {
+  width: min(420px, 92vw);
+  height: auto;
+}
+
+.about-body {
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.about-name {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.about-version {
+  color: var(--muted);
+}
+
+.about-text {
+  margin: 8px 0 0;
+  color: var(--muted);
 }
 
 /* ------------------------------------------------------- menú de pestaña */

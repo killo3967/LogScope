@@ -1,26 +1,16 @@
-import type { EncodingKind, ParserKind, Level } from "./types";
-import { ENCODINGS, LEVELS, LEVEL_BIT } from "./types";
+import { useEffect, useState } from "react";
+
+import type { Level } from "./types";
+import { LEVELS, LEVEL_BIT } from "./types";
 import { t } from "./textos";
 
 interface Props {
   path: string;
   onPathChange: (value: string) => void;
-  parser: ParserKind;
-  onParserChange: (value: ParserKind) => void;
-  encoding: EncodingKind;
-  onEncodingChange: (value: EncodingKind) => void;
-  /** Codificación que el núcleo detectó al abrir, para mostrarla en el título. */
-  detectedEncoding: string | null;
-  pattern: string;
-  onPatternChange: (value: string) => void;
-  delimiter: string;
-  onDelimiterChange: (value: string) => void;
   onOpen: () => void;
   onBrowse: () => void;
-  onColumns: () => void;
-  columnsEnabled: boolean;
-  onRules: () => void;
-  rulesCount: number;
+  onProperties: () => void;
+  propertiesEnabled: boolean;
   mask: number;
   onMaskChange: (value: number) => void;
   text: string;
@@ -30,15 +20,75 @@ interface Props {
   onToggleTail: () => void;
   autoScroll: boolean;
   onAutoScrollChange: (value: boolean) => void;
-  onSettings: () => void;
+  onRules: () => void;
+  onReload: () => void;
+  onPrint: () => void;
   busy: boolean;
   disabled: boolean;
 }
 
+/** Interruptor de la barra: glifo identificativo, pista visual y `title`. */
+function Interruptor({
+  activo,
+  disponible,
+  icono,
+  etiqueta,
+  titulo,
+  onClick,
+}: {
+  activo: boolean;
+  disponible: boolean;
+  icono: string;
+  /** Nombre corto visible junto al interruptor: sin él no se sabe qué apaga. */
+  etiqueta: string;
+  titulo: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      className={`toggle ${activo ? "on" : ""}`}
+      onClick={onClick}
+      disabled={!disponible}
+      title={titulo}
+      aria-pressed={activo}
+    >
+      <span className="toggle-icon" aria-hidden="true">
+        {icono}
+      </span>
+      <span className="toggle-label">{etiqueta}</span>
+      <span className="toggle-track" aria-hidden="true">
+        <span className="toggle-knob" />
+      </span>
+    </button>
+  );
+}
+
 export function Toolbar(props: Props) {
+  const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null);
+
   const toggleLevel = (level: Level) => {
     props.onMaskChange(props.mask ^ LEVEL_BIT[level]);
   };
+
+  const abrirMenu = (event: React.MouseEvent<HTMLButtonElement>) => {
+    const caja = event.currentTarget.getBoundingClientRect();
+    setMenuPos({
+      // Pegado a la derecha del botón, sin salirse de la ventana.
+      x: Math.max(8, Math.min(caja.left, window.innerWidth - 240)),
+      y: caja.bottom + 4,
+    });
+  };
+
+  const cerrarMenu = () => setMenuPos(null);
+
+  useEffect(() => {
+    if (!menuPos) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") cerrarMenu();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [menuPos]);
 
   return (
     <header className="toolbar">
@@ -62,46 +112,40 @@ export function Toolbar(props: Props) {
         <button onClick={props.onOpen} disabled={props.busy || props.path === ""}>
           {props.busy ? t("toolbar.abriendo") : t("toolbar.abrir")}
         </button>
-        <button
-          onClick={props.onColumns}
-          disabled={!props.columnsEnabled}
-          title={t("toolbar.columnasTooltip")}
-        >
-          {t("toolbar.columnas")}
-        </button>
-        <button
-          onClick={props.onRules}
-          title={t("toolbar.reglasTooltip")}
-        >
-          {props.rulesCount > 0
-            ? t("toolbar.reglasN", { n: props.rulesCount })
-            : t("toolbar.reglasVacio")}
-        </button>
 
-        <button
-          className={props.tailing ? "active" : ""}
-          onClick={props.onToggleTail}
-          disabled={!props.tailEnabled}
-          title={
+        <Interruptor
+          activo={props.tailing}
+          disponible={props.tailEnabled}
+          icono="▶"
+          etiqueta={t("toolbar.tailEtiqueta")}
+          titulo={
             props.tailEnabled
-              ? t("toolbar.tailSeguirTooltip")
+              ? props.tailing
+                ? t("toolbar.tailDetenerTooltip")
+                : t("toolbar.tailSeguirTooltip")
               : t("toolbar.tailNoDisponibleTooltip")
           }
+          onClick={props.onToggleTail}
+        />
+
+        <Interruptor
+          activo={props.autoScroll}
+          disponible
+          icono="⬇"
+          etiqueta={t("toolbar.autoscrollEtiqueta")}
+          titulo={
+            props.autoScroll
+              ? t("toolbar.autoscrollDesactivarTooltip")
+              : t("toolbar.autoscrollActivarTooltip")
+          }
+          onClick={() => props.onAutoScrollChange(!props.autoScroll)}
+        />
+
+        <button
+          onClick={props.onProperties}
+          disabled={!props.propertiesEnabled}
         >
-          {props.tailing ? t("toolbar.detenerTail") : t("toolbar.tailEnVivo")}
-        </button>
-
-        <label className="check">
-          <input
-            type="checkbox"
-            checked={props.autoScroll}
-            onChange={(event) => props.onAutoScrollChange(event.target.checked)}
-          />
-          {t("toolbar.autoscroll")}
-        </label>
-
-        <button className="icon" onClick={props.onSettings} title={t("toolbar.ajustesTooltip")}>
-          ⚙
+          {t("toolbar.propiedades")}
         </button>
       </div>
 
@@ -127,74 +171,70 @@ export function Toolbar(props: Props) {
           ))}
         </div>
 
-        {props.parser === "dsv" && (
-          <input
-            className="small"
-            value={props.delimiter}
-            maxLength={1}
-            onChange={(event) => props.onDelimiterChange(event.target.value)}
-            title={t("toolbar.delimitadorTooltip")}
-          />
-        )}
-        {props.parser === "pattern" && (
-          <input
-            className="pattern"
-            value={props.pattern}
-            onChange={(event) => props.onPatternChange(event.target.value)}
-            title={t("toolbar.patronTooltip")}
-          />
-        )}
-
-        {/* Formato y codificación van a la derecha de la segunda fila: la
-            primera ya tiene ruta, botones y seguimiento. */}
         <div className="toolbar-right">
-          <label className="field">
-            <span className="field-label">{t("toolbar.formato")}</span>
-            <select
-              value={props.parser}
-              onChange={(event) =>
-                props.onParserChange(event.target.value as ParserKind)
-              }
-              title={t("toolbar.formatoTooltip")}
-            >
-              <option value="auto">auto</option>
-              <option value="basic">basic</option>
-              <option value="logfmt">logfmt</option>
-              <option value="json">json</option>
-              <option value="clf">clf</option>
-              <option value="squarebracket">squarebracket</option>
-              <option value="log4jxml">log4jxml</option>
-              <option value="glassfish">glassfish</option>
-              <option value="websphere">websphere</option>
-              <option value="dsv">dsv</option>
-              <option value="pattern">pattern</option>
-            </select>
-          </label>
-
-          <label className="field">
-            <span className="field-label">{t("toolbar.codificacion")}</span>
-            <select
-              value={props.encoding}
-              onChange={(event) =>
-                props.onEncodingChange(event.target.value as EncodingKind)
-              }
-              title={
-                props.detectedEncoding
-                  ? t("toolbar.codificacionDetectadaTooltip", {
-                      encoding: props.detectedEncoding,
-                    })
-                  : t("toolbar.codificacionTooltip")
-              }
-            >
-              {ENCODINGS.map((option) => (
-                <option key={option} value={option}>
-                  {t(`toolbar.encoding.${option}`)}
-                </option>
-              ))}
-            </select>
-          </label>
+          <button
+            className="icon mas"
+            onClick={abrirMenu}
+            title={t("toolbar.masTooltip")}
+            aria-haspopup="menu"
+            aria-expanded={menuPos !== null}
+          >
+            {t("toolbar.mas")}
+          </button>
         </div>
       </div>
+
+      {menuPos && (
+        <>
+          <div
+            className="menu-backdrop"
+            onClick={cerrarMenu}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              cerrarMenu();
+            }}
+          />
+          <div
+            className="context-menu toolbar-menu"
+            style={{ left: menuPos.x, top: menuPos.y }}
+            role="menu"
+          >
+            <button
+              className="menu-item"
+              role="menuitem"
+              title={t("toolbar.reglasTooltip")}
+              onClick={() => {
+                cerrarMenu();
+                props.onRules();
+              }}
+            >
+              {t("toolbar.reglasVacio")}
+            </button>
+            <div className="menu-sep" />
+            <button
+              className="menu-item"
+              role="menuitem"
+              title={t("tab.recargarTooltip")}
+              onClick={() => {
+                cerrarMenu();
+                props.onReload();
+              }}
+            >
+              {t("tab.recargar")}
+            </button>
+            <button
+              className="menu-item"
+              role="menuitem"
+              onClick={() => {
+                cerrarMenu();
+                props.onPrint();
+              }}
+            >
+              {t("tab.imprimir")}
+            </button>
+          </div>
+        </>
+      )}
     </header>
   );
 }
