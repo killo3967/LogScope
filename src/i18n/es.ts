@@ -200,8 +200,12 @@ export const ES = {
   "sel.filasSeleccionadas": "{n} líneas seleccionadas",
   "sel.copiarFilas": "Copiar selección",
   "sel.copiarFilasNumeros": "Copiar con números de línea",
+  "sel.exportar": "Exportar selección",
+  "sel.exportarNumeros": "Exportar con números de línea",
   "sel.quitarSeleccion": "Quitar selección",
   "sel.copiando": "Copiando…",
+  "sel.exportando": "Exportando…",
+  "sel.exportado": "Exportado a {ruta}",
   "sel.demasiadasFilas":
     "La selección es demasiado grande para el portapapeles: {n} líneas",
 
@@ -234,6 +238,8 @@ export const ES = {
   "error.pattern_needs_named_group":
     "el patrón necesita al menos un grupo con nombre, p.ej. (?P<Message>.*)",
   "error.not_a_directory": "no es un directorio: {path}",
+  "error.export_empty": "la selección está vacía",
+  "error.export_failed": "no se pudo exportar: {message}",
 } as const;
 
 export type ClaveTexto = keyof typeof ES;

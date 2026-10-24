@@ -201,8 +201,12 @@ export const DE: Record<ClaveTexto, string> = {
   "sel.filasSeleccionadas": "{n} Zeilen ausgewählt",
   "sel.copiarFilas": "Auswahl kopieren",
   "sel.copiarFilasNumeros": "Mit Zeilennummern kopieren",
+  "sel.exportar": "Auswahl exportieren",
+  "sel.exportarNumeros": "Mit Zeilennummern exportieren",
   "sel.quitarSeleccion": "Auswahl aufheben",
   "sel.copiando": "Wird kopiert…",
+  "sel.exportando": "Wird exportiert…",
+  "sel.exportado": "Exportiert nach {ruta}",
   "sel.demasiadasFilas":
     "Die Auswahl ist zu groß für die Zwischenablage: {n} Zeilen",
 
@@ -234,4 +238,6 @@ export const DE: Record<ClaveTexto, string> = {
   "error.pattern_needs_named_group":
     "das Muster braucht mindestens eine benannte Gruppe, z. B. (?P<Message>.*)",
   "error.not_a_directory": "kein Verzeichnis: {path}",
+  "error.export_empty": "die Auswahl ist leer",
+  "error.export_failed": "Exportieren fehlgeschlagen: {message}",
 };

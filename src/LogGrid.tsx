@@ -75,6 +75,7 @@ export function LogGrid({
   const [seleccion, setSeleccion] = useState<Set<number>>(() => new Set());
   const [menuFilas, setMenuFilas] = useState<{ x: number; y: number } | null>(null);
   const [copiando, setCopiando] = useState(false);
+  const [exportando, setExportando] = useState(false);
   const [, bump] = useReducer((x: number) => x + 1, 0);
 
   const columns = useMemo(
@@ -365,6 +366,32 @@ export function LogGrid({
     [sessionId, seleccion, copiando, recogerFilas, copiarTexto, onAviso],
   );
 
+  /// Vuelca la selección a un fichero de texto junto al log. El núcleo decide
+  /// el nombre (no sobrescribe) y devuelve la ruta escrita, que se enseña en la
+  /// barra de aviso: sin diálogo, el usuario sabe dónde ha quedado el fichero.
+  const exportarSeleccion = useCallback(
+    async (conNumeros: boolean) => {
+      if (!sessionId || seleccion.size === 0 || copiando || exportando) return;
+      const indices = Array.from(seleccion).sort((a, b) => a - b);
+      setExportando(true);
+      try {
+        const ruta = await invoke<string>("export_selection", {
+          sessionId,
+          indices,
+          filters,
+          withLineNumbers: conNumeros,
+        });
+        setMenuFilas(null);
+        onAviso(t("sel.exportado", { ruta }));
+      } catch (cause) {
+        onAviso(mensajeDeError(String(cause)));
+      } finally {
+        setExportando(false);
+      }
+    },
+    [sessionId, seleccion, copiando, exportando, filters, onAviso],
+  );
+
   // Ctrl+C: el estándar del portapapeles para las filas marcadas. No se pisa
   // cuando el foco está en un campo de texto ni cuando hay texto marcado con el
   // ratón, que es lo que el usuario quiere copiar en ese caso.
@@ -582,7 +609,9 @@ export function LogGrid({
           open={menuFilas}
           count={seleccion.size}
           copiando={copiando}
+          exportando={exportando}
           onCopiar={(conNumeros) => void copiarSeleccion(conNumeros)}
+          onExportar={(conNumeros) => void exportarSeleccion(conNumeros)}
           onQuitar={() => {
             setAncla(null);
             setSeleccion(new Set());

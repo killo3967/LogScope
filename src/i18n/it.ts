@@ -198,8 +198,12 @@ export const IT: Record<ClaveTexto, string> = {
   "sel.filasSeleccionadas": "{n} righe selezionate",
   "sel.copiarFilas": "Copia selezione",
   "sel.copiarFilasNumeros": "Copia con numeri di riga",
+  "sel.exportar": "Esporta selezione",
+  "sel.exportarNumeros": "Esporta con numeri di riga",
   "sel.quitarSeleccion": "Deseleziona",
   "sel.copiando": "Copia in corso…",
+  "sel.exportando": "Esportazione in corso…",
+  "sel.exportado": "Esportato in {ruta}",
   "sel.demasiadasFilas":
     "La selezione è troppo grande per gli appunti: {n} righe",
 
@@ -231,4 +235,6 @@ export const IT: Record<ClaveTexto, string> = {
   "error.pattern_needs_named_group":
     "il pattern richiede almeno un gruppo denominato, ad es. (?P<Message>.*)",
   "error.not_a_directory": "non è una cartella: {path}",
+  "error.export_empty": "la selezione è vuota",
+  "error.export_failed": "impossibile esportare: {message}",
 };

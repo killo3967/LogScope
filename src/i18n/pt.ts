@@ -204,8 +204,12 @@ export const PT: Record<ClaveTexto, string> = {
   "sel.filasSeleccionadas": "{n} linhas selecionadas",
   "sel.copiarFilas": "Copiar seleção",
   "sel.copiarFilasNumeros": "Copiar com números de linha",
+  "sel.exportar": "Exportar seleção",
+  "sel.exportarNumeros": "Exportar com números de linha",
   "sel.quitarSeleccion": "Limpar seleção",
   "sel.copiando": "A copiar…",
+  "sel.exportando": "A exportar…",
+  "sel.exportado": "Exportado para {ruta}",
   "sel.demasiadasFilas":
     "A seleção é demasiado grande para a área de transferência: {n} linhas",
 
@@ -238,4 +242,6 @@ export const PT: Record<ClaveTexto, string> = {
   "error.pattern_needs_named_group":
     "o padrão precisa de pelo menos um grupo com nome, p. ex. (?P<Message>.*)",
   "error.not_a_directory": "não é uma pasta: {path}",
+  "error.export_empty": "a seleção está vazia",
+  "error.export_failed": "não foi possível exportar: {message}",
 };

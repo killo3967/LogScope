@@ -199,8 +199,12 @@ export const EN: Record<ClaveTexto, string> = {
   "sel.filasSeleccionadas": "{n} lines selected",
   "sel.copiarFilas": "Copy selection",
   "sel.copiarFilasNumeros": "Copy with line numbers",
+  "sel.exportar": "Export selection",
+  "sel.exportarNumeros": "Export with line numbers",
   "sel.quitarSeleccion": "Clear selection",
   "sel.copiando": "Copying…",
+  "sel.exportando": "Exporting…",
+  "sel.exportado": "Exported to {ruta}",
   "sel.demasiadasFilas":
     "The selection is too large for the clipboard: {n} lines",
 
@@ -233,4 +237,6 @@ export const EN: Record<ClaveTexto, string> = {
   "error.pattern_needs_named_group":
     "the pattern needs at least one named group, e.g. (?P<Message>.*)",
   "error.not_a_directory": "not a directory: {path}",
+  "error.export_empty": "the selection is empty",
+  "error.export_failed": "could not export: {message}",
 };

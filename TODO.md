@@ -141,6 +141,105 @@ persistencia va al final, cuando ya exista todo lo que hay que recordar.
       sobre las visibles. Formato: milisegundos si el log los trae; minutos y
       segundos enteros si no. Decidido: en la primera fila, vacío, y las líneas
       sin instante cortan la serie en vez de inventar un salto.
+- [ ] **Filtro avanzado con grid propio**. Consulta estructurada sobre la sesión,
+      del estilo «eventos WARN que contengan "tal", entre dos fechas y dentro de
+      la franja de 12:07 a 15:29». El resultado se ve en un **segundo grid en la
+      parte inferior**, con su propia zona de filtros, que se puede ocultar y
+      volver a mostrar.
+      - **Independiente del grid principal**: cada uno mantiene su scroll, su tail
+        y su autoscroll; el de abajo puede seguir el fichero mientras el de arriba
+        está parado, y al revés. No hace falta otro hilo de tail: la sesión se
+        sigue una vez en Rust y cada grid decide si se pega al final de *su*
+        resultado filtrado.
+      - Su **Delta Time** se calcula sobre las filas que pasan el filtro, no sobre
+        todas: es lo útil cuando estás filtrando.
+      - El panel es **por pestaña**: aparece solo donde se pidió y desaparece al
+        cambiar a otra que no lo tenga.
+      - **Vale también para pestañas con ficheros combinados**: el filtro se
+        aplica al orden entremezclado por instante, no a cada fuente. Y hay que
+        poder **filtrar por fuente** como una condición más (la columna `Source`
+        ya existe): es lo que permite quedarse con uno solo de los ficheros de la
+        vista combinada. **Decidido: se hace.**
+      - **Decisiones cerradas**:
+        - La consulta se edita en una **ventana con formulario**, con **grupos**:
+          dentro de cada grupo las condiciones se unen con **Y** o con **O**, los
+          grupos se unen entre sí con **Y**, y cada condición admite **NO**.
+        - Rango **entre dos fechas cualesquiera** (día, sin hora) y franja horaria
+          repetida **todos los días** de ese rango; la franja puede **cruzar
+          medianoche** (22:00–02:00 = 22:00–23:59 y 00:00–02:00 del día siguiente).
+        - El filtro **sustituye** a los niveles y el texto de la barra: la barra
+          sigue mandando en el grid principal y deja de aplicar al de abajo.
+        - Panel **redimensionable** (un tercio de la pantalla como alto inicial) y
+          recuerda su alto.
+        - El grid de abajo tiene **columnas visibles y anchos propios**,
+          independientes del principal: arrastrar `Message` arriba no toca el de
+          abajo. Solo se comparte la lista de columnas disponibles del fichero.
+        - Los filtros llevan **nombre**, se guardan **por fichero y además en una
+          biblioteca común** reutilizable entre logs, con **Guardar** y **Guardar
+          como…**.
+        - Al abrir un fichero con filtro guardado se **pregunta** si aplicarlo, y
+          en Ajustes se elige entre preguntar siempre o aplicar sin preguntar.
+        - Almacenamiento en `localStorage` (como las reglas de color), en una
+          clave nueva por ámbito; exportar e importar filtros a fichero queda como
+          paso siguiente.
+      - **Notas técnicas**:
+        - El filtrado va en el **núcleo**: `Filters` (`index.rs`) hoy solo tiene
+          `levels` y `text`; hay que ampliarlo con el árbol de condiciones, el
+          rango de fechas y la franja. El grid de abajo pedirá páginas igual que
+          el principal, no el conjunto completo.
+        - Las fechas de la consulta se guardan en ISO (`YYYY-MM-DD`) para no
+          depender del formato que se muestre en pantalla.
+        - Las líneas **sin instante** quedan fuera cuando hay rango de fechas o
+          franja horaria.
+- [ ] **Filtro avanzado en ventanas independientes** (pedido por el usuario). Hoy
+      el resultado se vería en el panel inferior; además tiene que poder **sacarse
+      a una ventana propia**, y poder tener **varias a la vez** (por ejemplo la
+      ventana principal con tres filtros). Con monitores grandes o varios
+      monitores, cada filtro en su ventana se lee mucho mejor que apilado abajo.
+      - **Notas técnicas**:
+        - Tauri 2 permite abrir ventanas con `WebviewWindow`. Las sesiones ya viven
+          en el estado de Rust (`AppState`), así que una ventana nueva puede pedir
+          `read_page` de la misma sesión sin duplicar nada.
+        - Cada ventana necesita su permiso: `capabilities/default.json` hoy cubre
+          solo la ventana `main`; habrá que añadir una capacidad para las ventanas
+          de filtro (patrón de etiqueta, p. ej. `filter-*`).
+        - El evento `log://appended` se emite con `app.emit`, que llega a **todas**
+          las ventanas, así que el tail funcionará en ellas sin cambios en Rust.
+        - La configuración (reglas de color, filtros guardados, anchos) vive en
+          `localStorage`, compartido porque todas las ventanas usan el mismo perfil
+          de WebView2; pero el navegador no avisa de los cambios entre ventanas de
+          forma fiable, así que hay que sincronizar con un evento de Tauri.
+        - El bundle es una sola entrada de Vite: hay que decidir cómo se abre la
+          vista de filtro (parámetro en la URL frente a una segunda entrada).
+        - Cerrar la ventana principal no debe dejar ventanas huérfanas apuntando a
+          sesiones cerradas.
+      - **Decidido con el usuario**:
+        - Al sacar un filtro a su ventana, **desaparece del panel inferior**: se
+          mueve, no se duplica.
+        - Dentro de esa ventana se **puede cambiar de filtro** con la biblioteca.
+        - Al arrancar, las ventanas de filtro se reabren **o no, según un ajuste**.
+        - Si se cierra la pestaña dueña, la ventana **avisa antes de cerrarse**.
+
+- [ ] **Tail en vivo en vistas combinadas**. Hoy `start_tail` se rechaza con
+      `tail_merged` (`lib.rs`) y la interfaz ni lo pide cuando la vista está
+      combinada (`App.tsx`: `settings.startWithTail && !result.merged`). El orden
+      de una vista combinada es `Vec<(ts, source_idx, entry_idx)>` ordenado por
+      instante, así que cada línea nueva hay que insertarla en su sitio. Hace
+      falta:
+      - insertar por instante con búsqueda binaria sobre `order`, manteniendo la
+        ronda entre fuentes cuando varias traen el mismo instante;
+      - avisar a la interfaz sin romper el grid virtualizado: hoy
+        `sync_single_source` solo empuja índices al final, y con inserciones en
+        medio hay que invalidar la caché de páginas y recolocar el scroll y la
+        fila marcada;
+      - pruebas de fusión con líneas entrando en varias fuentes a la vez.
+      Lo necesitan tanto el grid principal como el panel de filtro avanzado.
+- [ ] **Columna Delta Time**. Desde el menú contextual de la cabecera de `Time`,
+      añadir una columna con el tiempo transcurrido entre líneas. En el **grid
+      principal el delta se calcula sobre todas las filas del fichero**, no solo
+      sobre las visibles. Formato: milisegundos si el log los trae; minutos y
+      segundos enteros si no. Decidido: en la primera fila, vacío, y las líneas
+      sin instante cortan la serie en vez de inventar un salto.
 - [ ] **Exportar la selección a fichero**. Copiar ya está hecho (menú contextual
       de la selección y Ctrl+C, con o sin número de línea). Falta exportar a un
       fichero de texto, que en Tauri 2 necesita diálogo de guardado:
@@ -208,8 +307,9 @@ persistencia va al final, cuando ya exista todo lo que hay que recordar.
 Las fases 0 a 2 están hechas: boceto, cáscara de interfaz (`f07482a`) e i18n con
 seis idiomas (`70b36cf`). Queda:
 
-3. ~~**Selección múltiple + copiar**~~ — hecho. Queda **exportar a fichero**,
-   pendiente de autorizar `tauri-plugin-dialog`.
+3. ~~**Selección múltiple, copiar y exportar**~~ — hecho. La exportación escribe
+   junto al log (`<nombre>-seleccion.txt`) para no añadir dependencias; con
+   diálogo de guardado haría falta `tauri-plugin-dialog`.
 4. **Filtro avanzado**, por partes: (a) núcleo con `Filters` ampliado y pruebas;
    (b) formulario y biblioteca de filtros; (c) grid inferior independiente con su
    Delta Time; (d) pregunta al abrir y persistencia; (e) ventanas propias.

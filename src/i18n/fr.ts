@@ -204,8 +204,12 @@ export const FR: Record<ClaveTexto, string> = {
   "sel.filasSeleccionadas": "{n} lignes sélectionnées",
   "sel.copiarFilas": "Copier la sélection",
   "sel.copiarFilasNumeros": "Copier avec les numéros de ligne",
+  "sel.exportar": "Exporter la sélection",
+  "sel.exportarNumeros": "Exporter avec les numéros de ligne",
   "sel.quitarSeleccion": "Effacer la sélection",
   "sel.copiando": "Copie…",
+  "sel.exportando": "Exportation…",
+  "sel.exportado": "Exporté vers {ruta}",
   "sel.demasiadasFilas":
     "La sélection est trop grande pour le presse-papiers : {n} lignes",
 
@@ -237,4 +241,6 @@ export const FR: Record<ClaveTexto, string> = {
   "error.pattern_needs_named_group":
     "le motif doit contenir au moins un groupe nommé, p. ex. (?P<Message>.*)",
   "error.not_a_directory": "ce n'est pas un dossier : {path}",
+  "error.export_empty": "la sélection est vide",
+  "error.export_failed": "impossible d'exporter : {message}",
 };

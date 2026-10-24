@@ -8,7 +8,7 @@ mod tail;
 
 use std::collections::HashMap;
 use std::io::Read;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -247,6 +247,34 @@ fn build_parser(options: &OpenOptions, head: &[u8]) -> Result<Arc<dyn LogParser>
     }
 }
 
+/// Ruta del fichero de exportación: junto al log, con el nombre
+/// `<stem>-seleccion.txt` y, si ese ya existe, `-2`, `-3`… Así una exportación
+/// nunca pisa lo exportado antes ni el propio log.
+fn ruta_exportacion(log: &Path) -> PathBuf {
+    let carpeta = match log.parent() {
+        Some(padre) => padre.to_path_buf(),
+        None => PathBuf::new(),
+    };
+    let stem = log
+        .file_stem()
+        .map(|nombre| nombre.to_string_lossy().into_owned())
+        .unwrap_or_else(|| String::from("log"));
+
+    let mut intento = 1usize;
+    loop {
+        let nombre = if intento == 1 {
+            format!("{stem}-seleccion.txt")
+        } else {
+            format!("{stem}-seleccion-{intento}.txt")
+        };
+        let candidato = carpeta.join(nombre);
+        if !candidato.exists() {
+            return candidato;
+        }
+        intento += 1;
+    }
+}
+
 /// Carga un fichero por bloques: la cabecera primero, para deducir el parser.
 fn load_source(path: &PathBuf, options: &OpenOptions) -> Result<EntryTable, String> {
     let mut file = std::fs::File::open(path)
@@ -411,6 +439,58 @@ fn read_page(
     })
 }
 
+/// Exporta a un fichero de texto las líneas seleccionadas en la vista. Los
+/// índices son posiciones dentro del conjunto ya filtrado, que es lo que pagina
+/// `read_page`; si el filtro cambió mientras tanto, los índices que ya no
+/// existen se omiten en vez de escribir la línea equivocada.
+#[tauri::command]
+fn export_selection(
+    state: State<'_, AppState>,
+    session_id: String,
+    indices: Vec<usize>,
+    filters: Option<Filters>,
+    with_line_numbers: bool,
+) -> Result<String, String> {
+    let session = get_session(&state, &session_id)?;
+
+    let mut indices = indices;
+    indices.sort_unstable();
+    indices.dedup();
+    if indices.is_empty() {
+        return Err(error_json("export_empty", &[]));
+    }
+
+    let filters = filters.unwrap_or_default();
+    let texto = {
+        let set = lock_set(&session);
+        let visible = set.visible(&filters);
+        let mut lineas: Vec<String> = Vec::with_capacity(indices.len());
+        for index in indices {
+            let Some(&entrada) = visible.get(index) else {
+                continue;
+            };
+            let row = set.row(entrada as usize);
+            lineas.push(if with_line_numbers {
+                format!("{}: {}", row.line_no, row.raw)
+            } else {
+                row.raw
+            });
+        }
+        if lineas.is_empty() {
+            return Err(error_json("export_empty", &[]));
+        }
+        // Una línea por fila y salto final, como un fichero de texto normal.
+        let mut texto = lineas.join("\n");
+        texto.push('\n');
+        texto
+    };
+
+    let destino = ruta_exportacion(&session.path);
+    std::fs::write(&destino, texto.as_bytes())
+        .map_err(|e| error_json("export_failed", &[("message", &e.to_string())]))?;
+    Ok(destino.to_string_lossy().into_owned())
+}
+
 #[tauri::command]
 fn start_tail(app: AppHandle, state: State<'_, AppState>, session_id: String) -> Result<(), String> {
     let session = get_session(&state, &session_id)?;
@@ -480,6 +560,7 @@ pub fn run() {
             open_file,
             open_files,
             read_page,
+            export_selection,
             start_tail,
             stop_tail,
             stats,
@@ -553,6 +634,30 @@ mod tests {
 
         let _ = std::fs::remove_file(a);
         let _ = std::fs::remove_file(b);
+    }
+
+    #[test]
+    fn la_exportacion_no_pisa_un_fichero_existente() {
+        let log = escribe("destino", "2026-10-22 10:00:00 INFO hola\n");
+
+        let primera = ruta_exportacion(&log);
+        assert_eq!(
+            primera.file_name().unwrap(),
+            "logscope-combinar-destino-seleccion.txt"
+        );
+
+        // Lo exportado antes se queda como está: el nombre nuevo lleva número.
+        std::fs::write(&primera, "previo\n").unwrap();
+        let segunda = ruta_exportacion(&log);
+        assert_eq!(
+            segunda.file_name().unwrap(),
+            "logscope-combinar-destino-seleccion-2.txt"
+        );
+        assert_eq!(std::fs::read_to_string(&primera).unwrap(), "previo\n");
+
+        let _ = std::fs::remove_file(primera);
+        let _ = std::fs::remove_file(segunda);
+        let _ = std::fs::remove_file(log);
     }
 
     #[test]
