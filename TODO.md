@@ -28,12 +28,32 @@ los hitos del plan en [SPEC.md](SPEC.md); aquí solo lo que falta.
 
 ## Funciones pedidas
 
-Peticiones del dueño del proyecto. Orden recomendado: **selección múltiple →
-filtro avanzado → tail en combinadas → Delta Time → exportar y copiar → atajos →
-persistencia**. La selección es requisito de exportar y copiar; el filtro y el
+Peticiones del dueño del proyecto. Orden recomendado: **decidir la interfaz
+(menú y barra) → selección múltiple → filtro avanzado → tail en combinadas →
+Delta Time → exportar y copiar → atajos → persistencia**. La interfaz va primero
+porque decide dónde viven los botones de todo lo demás. La selección es requisito de exportar y copiar; el filtro y el
 tail en combinadas comparten el trabajo del orden por instante; y la
 persistencia va al final, cuando ya exista todo lo que hay que recordar.
 
+- [ ] **Simplificar la interfaz: menú superior, barra y accesos** (propuesta, sin
+      decidir). Hoy la primera fila lleva ruta, Examinar, Abrir, Columnas…,
+      Reglas…, Tail, Autoscroll y el engranaje; la segunda, filtro, siete chips de
+      nivel, Formato y Codificación. Con lo que falta por añadir (filtro avanzado,
+      pantalla completa, idioma, ventanas de filtro) se queda corta.
+      - **Opción A (recomendada)**: menú **solo para lo de la aplicación**
+        (Archivo, Ver, Herramientas, Ayuda: abrir, reabrir, pantalla completa,
+        ajustes, acerca de) y la barra para lo del log; **Formato, Codificación y
+        Columnas…** se van a un panel de *propiedades del fichero*, que se tocan al
+        abrir y casi nunca más.
+      - **Opción B**: menú completo. Libera la barra, pero esconde acciones de uso
+        constante (tail, autoscroll, filtro) a dos clics, y hay que construir y
+        traducir un menú por ventana abierta.
+      - **Opción C**: sin menú; un botón **⋯ Más** con lo poco frecuente y una
+        **paleta de comandos** (Ctrl+K) cuando lleguen los atajos.
+      - A favor del menú: descubre los atajos gratis (aceleradores), es lo que
+        espera un usuario de escritorio en Windows y permite manejar la aplicación
+        sin ratón. En contra: unos 24 px permanentes de alto, en un visor donde el
+        espacio vertical es el recurso escaso, y no se puede estilar.
 - [ ] **Selección de varias líneas**. Hoy solo hay una fila marcada con el clic
       (`selected: number | null` en `LogGrid.tsx`) y el menú de selección aparece
       al marcar texto con el ratón. Hace falta selección por rango (Mayús+clic),
@@ -111,11 +131,12 @@ persistencia va al final, cuando ya exista todo lo que hay que recordar.
           vista de filtro (parámetro en la URL frente a una segunda entrada).
         - Cerrar la ventana principal no debe dejar ventanas huérfanas apuntando a
           sesiones cerradas.
-      - **Pendiente de decidir**: al sacar el filtro, ¿desaparece del panel inferior
-        o se queda también?; ¿cada ventana muestra un filtro guardado concreto o
-        puede cambiar de filtro dentro?; ¿se reabren al arrancar, con su posición y
-        tamaño?; ¿qué pasa con la ventana si se cierra la pestaña a la que
-        pertenece el filtro?
+      - **Decidido con el usuario**:
+        - Al sacar un filtro a su ventana, **desaparece del panel inferior**: se
+          mueve, no se duplica.
+        - Dentro de esa ventana se **puede cambiar de filtro** con la biblioteca.
+        - Al arrancar, las ventanas de filtro se reabren **o no, según un ajuste**.
+        - Si se cierra la pestaña dueña, la ventana **avisa antes de cerrarse**.
 
 - [ ] **Tail en vivo en vistas combinadas**. Hoy `start_tail` se rechaza con
       `tail_merged` (`lib.rs`) y la interfaz ni lo pide cuando la vista está
